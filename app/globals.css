@@ -1,0 +1,275 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * LeadScan — identidade visual
+ * Preto/grafite + branco + amarelo-lima (#EFFF00). O lima é luz: CTAs, estados ativos e
+ * pequenos destaques (~10%). Texto de destaque sobre fundo claro usa --brand-ink (lima não
+ * tem contraste sobre branco). Verde #25D366 só para WhatsApp. Fonte: Inter.
+ */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+  --font-brand: var(--font-montserrat), var(--font-inter), ui-sans-serif, sans-serif;
+  --font-heading: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-heat-1: var(--heat-1);
+  --color-heat-2: var(--heat-2);
+  --color-heat-3: var(--heat-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+
+  /* Semânticos do produto */
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-ink: var(--brand-ink);
+  --color-primary-hover: var(--primary-hover);
+  /* Controles (checkbox, switch): visíveis no claro e no escuro */
+  --color-control: var(--control);
+  --color-control-track: var(--control-track);
+  --color-control-on: var(--control-on);
+  --color-control-on-foreground: var(--control-on-foreground);
+  /* Cores fixas da marca (iguais no claro e no escuro): áreas premium escuras */
+  --color-ink: #0a0d0f;
+  --color-ink-2: #111518;
+  --color-graphite: #252b30;
+  --color-lime: #efff00;
+  /* Sombras quase imperceptíveis: o design deve parecer leve */
+  --shadow-soft: 0 4px 20px rgba(10, 13, 15, 0.05);
+  --shadow-premium: 0 10px 40px rgba(10, 13, 15, 0.08);
+  --color-whatsapp: var(--whatsapp);
+  --color-whatsapp-foreground: var(--whatsapp-foreground);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-demo: var(--demo);
+  --color-demo-soft: var(--demo-soft);
+
+  /* Tokens do site gerado (definidos por protótipo no SiteRenderer) */
+  --color-site-primary: var(--site-primary);
+  --color-site-on-primary: var(--site-on-primary);
+  --color-site-accent: var(--site-accent);
+  --color-site-on-accent: var(--site-on-accent);
+  --color-site-bg: var(--site-bg);
+  --color-site-fg: var(--site-fg);
+  --color-site-muted: var(--site-muted);
+  --color-site-card: var(--site-card);
+  --color-site-line: var(--site-line);
+  --color-site-tint: var(--site-tint);
+  --font-site-heading: var(--site-font-heading);
+  --font-site-body: var(--site-font-body);
+  --radius-site: var(--site-radius);
+
+  /* 6 · 8 · 12 · 16: pequenos, botões/inputs, cards, cards principais/modais */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  --radius: 0.75rem;
+  /* Produto claro: 70% branco/cinza muito claro, 20% preto/grafite, 10% lima */
+  --background: #f7f8f9;
+  --foreground: #0a0d0f;
+  --card: #ffffff;
+  --card-foreground: #0a0d0f;
+  --popover: #ffffff;
+  --popover-foreground: #0a0d0f;
+  --primary: #efff00;
+  --primary-foreground: #0a0d0f;
+  --primary-hover: #dfee00;
+  --secondary: #eef0f2;
+  --secondary-foreground: #252b30;
+  --muted: #eef0f2;
+  --muted-foreground: #5a636a;
+  --accent: #f1f3f4;
+  --accent-foreground: #0a0d0f;
+  --destructive: #c93434;
+  --border: #e5e8ea;
+  --input: #cfd5da;
+  /* Borda de checkbox/rádio desmarcado: 3:1 sobre branco. Marcado = preto com lima */
+  --control: #8a939a;
+  --control-track: #c3cad0;
+  --control-on: #0a0d0f;
+  --control-on-foreground: #efff00;
+  /* Foco visível: tinta no claro (lima sobre branco não tem contraste) */
+  --ring: #0a0d0f;
+
+  --brand: #efff00;
+  --brand-foreground: #0a0d0f;
+  --brand-soft: #f8ffbf;
+  /* Lima "legível": para texto/ícone de destaque sobre fundo claro */
+  --brand-ink: #5b6600;
+  --whatsapp: #25d366;
+  --whatsapp-foreground: #0a0d0f;
+  --success: #3f6b00;
+  --success-soft: #ecfbcc;
+  --warning: #7a5d00;
+  --warning-soft: #fff5c7;
+  --demo: #3552b8;
+  --demo-soft: #ebefff;
+
+  /* Gráficos (validados: faixa de luminosidade, daltonismo e contraste 3:1) */
+  --chart-1: #7e8c00;
+  --chart-2: #25d366;
+  --chart-3: #4f6fd8;
+  --chart-4: #ffd84d;
+  --chart-5: #7b858d;
+  /* calor dos gráficos (pior = mais quente): âmbar → laranja → vermelho, claridade descendo */
+  --heat-1: #d98a00;
+  --heat-2: #dd5a0c;
+  --heat-3: #b91c1c;
+
+  /* Sidebar sempre escura: assinatura da marca */
+  --sidebar: #0a0d0f;
+  --sidebar-foreground: #b9c1c7;
+  --sidebar-primary: #efff00;
+  --sidebar-primary-foreground: #0a0d0f;
+  --sidebar-accent: #1a1f23;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-ring: #efff00;
+}
+
+.dark {
+  --background: #0a0d0f;
+  --foreground: #f3f5f6;
+  --card: #111518;
+  --card-foreground: #f3f5f6;
+  --popover: #15191c;
+  --popover-foreground: #f3f5f6;
+  --primary: #efff00;
+  --primary-foreground: #0a0d0f;
+  --primary-hover: #f5ff4d;
+  --secondary: #1a1f23;
+  --secondary-foreground: #f3f5f6;
+  --muted: #1a1f23;
+  --muted-foreground: #9aa3aa;
+  --accent: #1f2529;
+  --accent-foreground: #f3f5f6;
+  --destructive: #ff6b6b;
+  --border: rgba(255, 255, 255, 0.08);
+  --input: rgba(255, 255, 255, 0.14);
+  --control: rgba(255, 255, 255, 0.36);
+  --control-track: rgba(255, 255, 255, 0.2);
+  --control-on: #efff00;
+  --control-on-foreground: #0a0d0f;
+  --ring: #efff00;
+
+  --brand: #efff00;
+  --brand-foreground: #0a0d0f;
+  --brand-soft: #2a2e0a;
+  --brand-ink: #efff00;
+  --whatsapp: #25d366;
+  --whatsapp-foreground: #0a0d0f;
+  --success: #b8f23d;
+  --success-soft: #232f10;
+  --warning: #ffd84d;
+  --warning-soft: #33290f;
+  --demo: #8ca8ff;
+  --demo-soft: #1a2238;
+
+  --chart-1: #8e9a00;
+  --chart-2: #25d366;
+  --chart-3: #5e7fe6;
+  --chart-4: #ffd84d;
+  --chart-5: #7b858d;
+  --heat-1: #f5b83d;
+  --heat-2: #f07a2a;
+  --heat-3: #e5484d;
+
+  --sidebar: #0a0d0f;
+  --sidebar-foreground: #b9c1c7;
+  --sidebar-primary: #efff00;
+  --sidebar-primary-foreground: #0a0d0f;
+  --sidebar-accent: #1a1f23;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-ring: #efff00;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "ss01", "cv11";
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  html {
+    @apply font-sans;
+    -webkit-tap-highlight-color: transparent;
+    /* celular: sem zoom de dois toques (o toque responde na hora); pinça para ampliar continua valendo */
+    touch-action: manipulation;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+  /* Números alinhados em tabelas, métricas e scores */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/*
+ * iPhone amplia a tela sozinho ao focar um campo com letra menor que 16px. Fora das camadas
+ * (vence os utilitários text-sm) e só em tela de toque — no desktop os campos seguem compactos.
+ */
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+  textarea,
+  select {
+    font-size: max(16px, 1em);
+  }
+}

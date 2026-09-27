@@ -1,0 +1,30 @@
+@AGENTS.md
+
+# LeadScan — notas do projeto
+
+- UI e textos em pt-BR. Tom humano (sem clichês de IA, sem tríades de adjetivos). Nunca inventar dados de empresas: campo ausente = "Não encontrado".
+- Stack: Next.js 16 (App Router, `proxy.ts`, APIs de request assíncronas), Tailwind v4 + shadcn (radix-nova), Prisma 7 + PostgreSQL via `@prisma/adapter-pg`. Banco local: `npm run db:start` (Prisma Dev).
+- Economia de tokens é requisito: filtros, score, templates, links e primeira versão das mensagens são código. IA só em `lib/ai/tasks.ts`, com cache em `AICache`.
+- Toda mutação passa por `action()` em `lib/action.ts` e toda query filtra por `userId`.
+- Mudou pesos do score? Incremente `SCORE_VERSION` em `lib/scoring/index.ts` (leads antigos são recalculados).
+- Sites gerados: `SiteSpec` (`lib/templates/types.ts`) renderizado por `components/site` com container queries (`@3xl`, `@5xl`).
+- Verificação: `npm test`, `npm run typecheck`, `npm run lint`, `npm run build`.
+- Banco local (`prisma dev`/PGlite) atende UMA conexão por vez: `lib/db.ts` usa pool 1 em dev. Não rode scripts/seed/studio com o `npm run dev` ligado. Schema mudou? Gere a migração com `prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script` e aplique com `prisma db execute` (o `db push` pede confirmação humana).
+- Actions sem sessão (login) usam `publicAction()` (rate limit por IP). Uploads: `lib/media/store.ts` (sharp + moderação). Segredos de usuário: `lib/crypto/secrets.ts`.
+- Pagamentos: só `applyPaymentUpdate()` (lib/payments/service.ts) transforma cobrança em venda — idempotente. Ranking/níveis leem `Sale` verificada (`lib/ranking`, `lib/gamification`); datas agrupadas em America/Sao_Paulo via SQL.
+- Tempo real: `publish()` em `lib/realtime.ts` + `<LiveRefresh topics>` no cliente (SSE em `/api/live`).
+- IA por usuário: `getAI(userId)` prefere a conexão do usuário (`lib/ai/connections.ts`), senão a da plataforma. Catálogo e links de "levar para…" em `lib/ai/catalog.ts`.
+- Imagens do SiteSpec: só `https://` ou rotas internas (`INTERNAL_IMAGE_RE`: `/api/media/…`, `/api/places-photo/…`).
+- Identidade visual (obrigatória em telas novas): preto `ink` #0A0D0F + branco + lima #EFFF00 (~10%, só CTAs/estado ativo/destaque), Inter, tokens em `app/globals.css`. Lima NUNCA como texto/ícone sobre fundo claro (sem contraste): use `text-brand-ink`. Botão principal = `Button` padrão (lima); escuro = `variant="ink"`; WhatsApp = `bg-whatsapp` (texto preto). Cards: `rounded-lg border bg-card shadow-soft`. Sidebar sempre escura com indicador lima. Gráficos usam `--chart-1/3` (validados), não o lima puro.
+- Marca: LeadScan — vetor da logo oficial (pessoa com cabeça-rede lima, seta zigue-zague prateada, alvo lima) em `components/app-shell/logo.tsx`; ids do SVG via `useId` (nunca fixos). Solta só em fundo escuro, `boxed` no claro. Wordmark em Montserrat (`font-brand`), o resto do app é Inter. Selos/insígnias SVG em `components/profile/insignia.tsx`; `badgeKeyFor()` decide qual aparece no canto da foto (`UserAvatar badge=`).
+- Busca: sem cidade = busca geral (UF inteira ou Brasil) via `lib/domain/regions.ts`. Leads NUNCA repetem para o mesmo usuário: `excludeKnown()` (externalId, `dedupeKey` nome|cidade|UF, telefone em dados reais). Mock pagina por `offset`.
+- Chat: `lib/chat/service.ts` (conversa por par, bloqueio nos 2 sentidos), mídia só por `/api/chat/media/[id]` (checa membro, suporta Range). Presença = heartbeat `/api/presence` → `lastActiveAt`; `presenceOf()` (online <2min, inativo <30min). Eventos ao vivo: UMA EventSource por aba (`lib/client/live.ts`); não crie EventSource direto.
+- Bundle do navegador: nada de `zod` em código cliente — use `lib/domain/filters.ts` e `lib/templates/constants.ts` (os módulos com zod são só do servidor).
+- Layout mobile: grade com tabela/texto truncado precisa de `grid-cols-1` (senão a coluna automática estoura a tela); `<table className="sr-only">` estoura — envolva num `div.sr-only`.
+- Ícones de presença (site/Instagram/WhatsApp/Facebook/Google/telefone) sempre clicáveis: destinos em `lib/leads/links.ts` (só http(s); DEMO: WhatsApp sem destinatário e telefone sem link), componente `PresenceIcons`. Link dentro de card clicável: `relative z-10` acima do `after:inset-0`.
+- Listas: "remover" lead = tirar de Meus leads/Favoritos (`setLeadLists`), nunca apagar (a busca depende do registro para não repetir). Protótipo tem `favorite` (favoritos primeiro); mudar estrela não mexe no `updatedAt`.
+- Gráficos "ruins" esquentam: tokens `--heat-1/2/3` (âmbar→vermelho). `TimeChart`: `tone: "bad"` (maior = pior), `heat` (abaixo da média esquenta) e `partialLast`; sempre com legenda + frase-resumo em texto. Funil esquenta etapa com perda alta.
+- Miniaturas de site: passe `previewSpec(spec)` (lib/templates/preview.ts) ao `ScaledSite` — só 2 seções e fotos menores; o card só desenha perto da tela (`eager` acima da dobra).
+- Celular: `touch-action: manipulation` (sem zoom de dois toques) e campos com 16px em tela de toque (iPhone não amplia ao focar). Não use `maximum-scale`.
+- Vercel/serverless: `vercel-build` roda `prisma migrate deploy`; CLI usa conexão direta (DIRECT_URL/DATABASE_URL_UNPOOLED). Corpo/resposta até 4,5 MB: vídeo/áudio grande sobe em partes (`/api/chat/[id]/media/part`, Media `source="partial"` até fechar) e mídia do chat sai em fatias (substring no bytea). SSE se renova antes do `maxDuration` e o cliente recebe `resync`. Fila de buscas: `after()` + reserva QUEUED→RUNNING no banco; RUNNING parado 2 min é retomado.
+- Muita gente ao mesmo tempo: placar/faturamento da comunidade em cache compartilhado (`lib/ranking/cached.ts`, tag "community", invalidada no `publish()` de eventos da comunidade). Layout do app = 1 consulta (`shellCounts`); métricas do dashboard = 1 consulta. Prefira agregados com FILTER a várias `count()`.

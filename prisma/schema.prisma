@@ -1,0 +1,638 @@
+// LeadScan — schema principal (PostgreSQL)
+//
+// Três motores:
+//   1. Motor de Leads        → Search, ProviderCache, Suppression
+//   2. Motor de Oportunidade → campos score* em Lead (calculados por código, sem IA)
+//   3. Motor de Venda        → Outreach, Prototype, LeadEvent, pipeline (Lead.status)
+//
+// Todo dado privado pertence a um User (userId) e TODA consulta da aplicação filtra por ele.
+//
+// Comunidade (v2): contas públicas (Google, e-mail, celular), perfis, pagamentos pela
+// plataforma (Charge → Sale), ranking semanal/mensal e níveis. Faturamento de outra conta
+// só aparece para quem deu consentimento explícito (User.rankingOptIn).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Plan {
+  FREE
+  PRO
+  AGENCY
+}
+
+enum LeadStatus {
+  NEW
+  INTERESTING
+  CONTACTED
+  REPLIED
+  NEGOTIATION
+  PROPOSAL
+  WON
+  NOT_INTERESTED
+  LOST
+}
+
+enum ScoreTier {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum OutreachVariant {
+  SHORT
+  PROFESSIONAL
+  CONVERSATIONAL
+}
+
+enum ContentSource {
+  TEMPLATE
+  AI
+  MANUAL
+}
+
+enum PrototypeStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum JobStatus {
+  QUEUED
+  RUNNING
+  DONE
+  FAILED
+}
+
+enum LeadEventType {
+  FOUND
+  SAVED
+  UNSAVED
+  STATUS_CHANGED
+  NOTE_UPDATED
+  OUTREACH_GENERATED
+  OUTREACH_COPIED
+  WHATSAPP_OPENED
+  PROTOTYPE_CREATED
+  PROTOTYPE_SHARED
+  PROPOSAL_VIEWED
+  PROPOSAL_CTA_CLICKED
+  PAYMENT_LINK_CREATED
+  PAYMENT_RECEIVED
+  SALE_RECORDED
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum AuthChannel {
+  EMAIL
+  SMS
+}
+
+enum MediaKind {
+  AVATAR
+  SITE_IMAGE
+  AI_IMAGE
+  CHAT_IMAGE
+  CHAT_AUDIO
+  CHAT_VIDEO
+}
+
+enum MessageKind {
+  TEXT
+  IMAGE
+  AUDIO
+  VIDEO
+}
+
+/// APPROVED = passou pela moderação; UNVERIFIED = sem moderador configurado (só modo demo).
+enum ModerationStatus {
+  APPROVED
+  UNVERIFIED
+  REJECTED
+}
+
+enum ConnectionStatus {
+  PENDING
+  ACTIVE
+  ERROR
+  DISCONNECTED
+}
+
+enum ChargeStatus {
+  PENDING
+  PAID
+  FAILED
+  EXPIRED
+  CANCELED
+  REFUNDED
+}
+
+enum SaleSource {
+  PLATFORM
+  MANUAL
+}
+
+model User {
+  id              String    @id @default(cuid())
+  /// Opcional: contas criadas pelo celular não têm e-mail.
+  email           String?   @unique
+  emailVerifiedAt DateTime?
+  /// E.164 sem + (ex.: 5585999998888)
+  phone           String?   @unique
+  phoneVerifiedAt DateTime?
+  googleId        String?   @unique
+  name            String
+  agencyName      String?
+  /// WhatsApp do próprio freelancer/agência — usado no CTA da página de proposta.
+  whatsapp        String?
+  /// Ticket médio padrão (centavos) para estimar o valor do pipeline.
+  defaultTicket   Int       @default(150000)
+  plan            Plan      @default(FREE)
+  role            Role      @default(USER)
+  isDemo          Boolean   @default(false)
+  /// Incrementar invalida todas as sessões ("sair de todos os dispositivos").
+  sessionVersion  Int       @default(0)
+  termsAcceptedAt DateTime?
+  onboardedAt     DateTime?
+
+  // Perfil público
+  username       String?   @unique
+  bio            String?
+  instagram      String?
+  avatarId       String?   @unique
+  avatar         Media?    @relation("UserAvatar", fields: [avatarId], references: [id], onDelete: SetNull)
+  /// Aberto: perfil visível para a comunidade. Fechado: só você vê.
+  profilePublic  Boolean   @default(true)
+  showAccountAge Boolean   @default(true)
+  /// Consentimento (LGPD) para aparecer no ranking e no painel de faturamento da comunidade.
+  rankingOptIn   Boolean   @default(false)
+  rankingOptInAt DateTime?
+  /// Título exibido ao lado do nome (chave de lib/gamification). Null = nível atual.
+  displayTitle   String?
+  /// Nível atual (0–10), recalculado a cada venda verificada.
+  level          Int       @default(0)
+  /// Provedor de IA preferido do usuário (id de lib/ai/catalog.ts)
+  aiDefault      String?
+  /// Última atividade (heartbeat do app aberto): base do online / inativo / offline.
+  lastActiveAt   DateTime?
+  /// false = ninguém vê seu status (online, inativo, offline).
+  presenceVisible Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  leads           Lead[]
+  searches        Search[]
+  events          LeadEvent[]
+  outreaches      Outreach[]
+  prototypes      Prototype[]
+  media           Media[]          @relation("UserMedia")
+  aiConnections   AIConnection[]
+  paymentAccounts PaymentAccount[]
+  charges         Charge[]
+  sales           Sale[]
+  achievements    Achievement[]
+  authCodes       AuthCode[]
+  memberships     ConversationMember[]
+  messages        Message[]
+  blocks          UserBlock[]      @relation("Blocker")
+  blockedBy       UserBlock[]      @relation("Blocked")
+
+  @@index([rankingOptIn, level])
+}
+
+model Lead {
+  id         String  @id @default(cuid())
+  userId     String
+  user       User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Fonte do dado: mock | osm | google
+  provider   String
+  externalId String
+  isDemo     Boolean @default(false)
+
+  // Dados comerciais públicos (nunca inventados — null quando a fonte não informa)
+  name          String
+  category      String
+  categoryLabel String
+  city          String
+  state         String
+  address       String?
+  neighborhood  String?
+  /// Telefone principal, somente dígitos com DDI (ex.: 5585999998888)
+  phone         String?
+  /// Número que a própria fonte declara como WhatsApp
+  whatsapp      String?
+  website       String?
+  /// Handle do Instagram sem @
+  instagram     String?
+  facebook      String?
+  mapsUrl       String?
+  rating        Float?
+  reviewCount   Int?
+  openingHours  String[]
+  description   String?
+  services      String[]
+  latitude      Float?
+  longitude     Float?
+  /// Fotos reais do negócio (Google Places): [{ ref, width, height, credits[] }]
+  photos        Json     @default("[]")
+  fetchedAt     DateTime @default(now())
+  /// nome|cidade|UF normalizados: a mesma empresa não volta em outra busca
+  dedupeKey     String?
+
+  // Motor de oportunidade (determinístico)
+  score        Int       @default(0)
+  scoreTier    ScoreTier @default(LOW)
+  scoreReasons Json      @default("[]")
+  scoreVersion Int       @default(1)
+
+  // CRM
+  status        LeadStatus @default(NEW)
+  saved         Boolean    @default(false)
+  favorite      Boolean    @default(false)
+  notes         String?
+  /// Valor estimado do negócio (centavos). Null = usa o ticket padrão do usuário.
+  dealValue     Int?
+  lastContactAt DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  events     LeadEvent[]
+  outreaches Outreach[]
+  prototypes Prototype[]
+  charges    Charge[]
+  sales      Sale[]
+
+  @@unique([userId, provider, externalId])
+  @@index([userId, dedupeKey])
+  @@index([userId, category, city])
+  @@index([userId, saved, status])
+  @@index([userId, score(sort: Desc)])
+  @@index([userId, favorite])
+}
+
+model LeadEvent {
+  id        String        @id @default(cuid())
+  leadId    String
+  lead      Lead          @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      LeadEventType
+  meta      Json?
+  createdAt DateTime      @default(now())
+
+  @@index([leadId, createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+/// Uma mensagem atual por variante por lead (regenerar sobrescreve).
+model Outreach {
+  id        String          @id @default(cuid())
+  leadId    String
+  lead      Lead            @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  variant   OutreachVariant
+  content   String
+  source    ContentSource   @default(TEMPLATE)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  @@unique([leadId, variant])
+  @@index([userId, updatedAt(sort: Desc)])
+}
+
+model Prototype {
+  id           String          @id @default(cuid())
+  userId       String
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  leadId       String
+  lead         Lead            @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  name         String
+  version      Int             @default(1)
+  templateId   String
+  /// SiteSpec (ver lib/templates/types.ts) — o site é renderizado a partir deste JSON.
+  spec         Json
+  status       PrototypeStatus @default(DRAFT)
+  /// Slug público e não adivinhável (ex.: clinica-bella-k3j9x2m1qa)
+  shareSlug    String?         @unique
+  shareEnabled Boolean         @default(false)
+  /// Estrela na lista de protótipos (vem primeiro e aparece na aba Favoritos)
+  favorite     Boolean         @default(false)
+  views        Int             @default(0)
+  lastViewedAt DateTime?
+  publishedAt  DateTime?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  charges      Charge[]
+
+  @@index([userId, updatedAt(sort: Desc)])
+  @@index([userId, favorite])
+  @@index([leadId])
+}
+
+/// Busca = job de prospecção. Buscas simples terminam na hora; lotes (várias
+/// categorias × cidades) são processados pela fila em lib/leads/queue.ts.
+model Search {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  query       String?
+  params      Json
+  provider    String
+  status      JobStatus @default(QUEUED)
+  progress    Int       @default(0)
+  total       Int       @default(0)
+  leadIds     String[]
+  resultCount Int       @default(0)
+  error       String?
+  createdAt   DateTime  @default(now())
+  /// Muda a cada cidade processada: busca "RUNNING" parada há 2 min é retomada por outra instância
+  updatedAt   DateTime  @default(now()) @updatedAt
+  finishedAt  DateTime?
+
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+/// Cache de respostas das fontes de dados (evita chamadas repetidas).
+model ProviderCache {
+  key       String   @id
+  provider  String
+  payload   Json
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
+/// Cache de respostas de IA — nada é gerado duas vezes para o mesmo contexto.
+model AICache {
+  key          String   @id
+  kind         String
+  model        String
+  response     Json
+  inputTokens  Int      @default(0)
+  outputTokens Int      @default(0)
+  hits         Int      @default(0)
+  createdAt    DateTime @default(now())
+}
+
+/// LGPD: empresas que pediram para não serem contatadas. Vale para toda a plataforma.
+model Suppression {
+  id        String   @id @default(cuid())
+  /// phone | external | name_city
+  kind      String
+  value     String
+  reason    String?
+  createdAt DateTime @default(now())
+
+  @@unique([kind, value])
+}
+
+// ─── Comunidade, contas e pagamentos ─────────────────────────────
+
+/// Código de 6 dígitos enviado por e-mail/SMS. Só o hash fica salvo.
+model AuthCode {
+  id         String      @id @default(cuid())
+  channel    AuthChannel
+  /// e-mail minúsculo ou telefone E.164
+  target     String
+  /// LOGIN (entrar/criar conta) ou LINK (vincular a uma conta existente)
+  purpose    String      @default("LOGIN")
+  userId     String?
+  user       User?       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash   String
+  attempts   Int         @default(0)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime    @default(now())
+
+  @@index([channel, target, createdAt(sort: Desc)])
+}
+
+/// Imagens (avatar, fotos dos sites, imagens geradas por IA). Pequenas (webp),
+/// guardadas no banco para funcionar em qualquer hospedagem. Metadados EXIF removidos.
+model Media {
+  id             String           @id @default(cuid())
+  userId         String
+  user           User             @relation("UserMedia", fields: [userId], references: [id], onDelete: Cascade)
+  kind           MediaKind
+  mime           String
+  data           Bytes
+  width          Int
+  height         Int
+  size           Int
+  moderation     ModerationStatus
+  moderationNote String?
+  /// upload | gemini | openai
+  source         String           @default("upload")
+  createdAt      DateTime         @default(now())
+  avatarOf       User?            @relation("UserAvatar")
+  messageOf      Message?         @relation("MessageMedia")
+  posterOf       Message?         @relation("MessagePoster")
+
+  @@index([userId, kind, createdAt(sort: Desc)])
+}
+
+/// Conta de IA conectada pelo usuário (chave própria, criptografada com AES-256-GCM).
+model AIConnection {
+  id            String           @id @default(cuid())
+  userId        String
+  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// id de lib/ai/catalog.ts (anthropic, openai, gemini, openrouter, groq…)
+  provider      String
+  keyEnc        String?
+  keyLast4      String?
+  baseUrl       String?
+  model         String?
+  imageModel    String?
+  status        ConnectionStatus @default(ACTIVE)
+  lastError     String?
+  lastCheckedAt DateTime?
+  lastUsedAt    DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@unique([userId, provider])
+}
+
+/// Conta de recebimento conectada (Mercado Pago, Stripe…). O dinheiro vai direto para
+/// a conta do usuário; a plataforma nunca vê dados de cartão (checkout hospedado).
+model PaymentAccount {
+  id             String           @id @default(cuid())
+  userId         String
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// mock | mercadopago | stripe
+  provider       String
+  status         ConnectionStatus @default(PENDING)
+  externalId     String?
+  accessEnc      String?
+  refreshEnc     String?
+  tokenExpiresAt DateTime?
+  publicKey      String?
+  livemode       Boolean          @default(false)
+  meta           Json?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  charges        Charge[]
+
+  @@unique([userId, provider])
+  @@index([provider, externalId])
+}
+
+/// Cobrança (link de pagamento) enviada ao cliente final.
+model Charge {
+  id                String          @id @default(cuid())
+  userId            String
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  leadId            String?
+  lead              Lead?           @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  prototypeId       String?
+  prototype         Prototype?      @relation(fields: [prototypeId], references: [id], onDelete: SetNull)
+  accountId         String?
+  account           PaymentAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  provider          String
+  /// Slug público não adivinhável: /pagar/<slug>
+  slug              String          @unique
+  description       String
+  amountCents       Int
+  currency          String          @default("BRL")
+  /// pix | credit_card | debit_card
+  methods           String[]
+  status            ChargeStatus    @default(PENDING)
+  checkoutUrl       String?
+  externalId        String?
+  externalPaymentId String?
+  /// Meio efetivamente usado: pix | credit_card | debit_card | other
+  paidMethod        String?
+  feeCents          Int?
+  netCents          Int?
+  isTest            Boolean         @default(false)
+  paidAt            DateTime?
+  expiresAt         DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  sale              Sale?
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([provider, externalId])
+}
+
+/// Venda fechada. PLATFORM = paga pela plataforma e confirmada pelo provedor (verified);
+/// MANUAL = registrada à mão (entra no seu financeiro, mas não no ranking nem nos níveis).
+model Sale {
+  id          String     @id @default(cuid())
+  userId      String
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  leadId      String?
+  lead        Lead?      @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  chargeId    String?    @unique
+  charge      Charge?    @relation(fields: [chargeId], references: [id], onDelete: SetNull)
+  source      SaleSource
+  verified    Boolean    @default(false)
+  isTest      Boolean    @default(false)
+  amountCents Int
+  method      String?
+  /// Pontos do ranking (lib/gamification/points.ts), gravados na hora da venda.
+  points      Int        @default(0)
+  note        String?
+  closedAt    DateTime   @default(now())
+  refundedAt  DateTime?
+  createdAt   DateTime   @default(now())
+
+  @@index([userId, closedAt(sort: Desc)])
+  @@index([verified, closedAt])
+}
+
+/// Níveis e títulos conquistados (a data aparece no perfil).
+model Achievement {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  key        String
+  unlockedAt DateTime @default(now())
+
+  @@unique([userId, key])
+}
+
+/// Idempotência de webhooks: o mesmo evento nunca é processado duas vezes.
+model WebhookEvent {
+  id          String    @id @default(cuid())
+  provider    String
+  eventId     String
+  processedAt DateTime?
+  error       String?
+  createdAt   DateTime  @default(now())
+
+  @@unique([provider, eventId])
+}
+
+// ─── Mensagens entre usuários ────────────────────────────────────
+
+/// Conversa privada entre duas pessoas (pairKey = ids ordenados: uma por par).
+model Conversation {
+  id            String               @id @default(cuid())
+  pairKey       String               @unique
+  lastMessageAt DateTime             @default(now())
+  createdAt     DateTime             @default(now())
+  members       ConversationMember[]
+  messages      Message[]
+}
+
+model ConversationMember {
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Tudo até aqui foi lido (não lidas = mensagens do outro depois disso).
+  lastReadAt     DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@id([conversationId, userId])
+  @@index([userId])
+}
+
+/// Texto, foto, áudio ou vídeo. Mídia fica em Media (servida só para quem está na conversa).
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  kind           MessageKind  @default(TEXT)
+  body           String?
+  mediaId        String?      @unique
+  media          Media?       @relation("MessageMedia", fields: [mediaId], references: [id], onDelete: SetNull)
+  /// Quadro do vídeo (moderado) usado como capa
+  posterId       String?      @unique
+  poster         Media?       @relation("MessagePoster", fields: [posterId], references: [id], onDelete: SetNull)
+  durationMs     Int?
+  createdAt      DateTime     @default(now())
+  /// Apagada para todos: some o conteúdo, fica o aviso.
+  deletedAt      DateTime?
+  /// Texto corrigido por quem enviou (a bolha mostra "editada").
+  editedAt       DateTime?
+
+  @@index([conversationId, createdAt(sort: Desc)])
+  @@index([senderId])
+}
+
+/// Bloqueio: quem bloqueou não recebe mais mensagens de quem foi bloqueado (e vice-versa).
+model UserBlock {
+  blockerId String
+  blocker   User     @relation("Blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blockedId String
+  blocked   User     @relation("Blocked", fields: [blockedId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([blockerId, blockedId])
+  @@index([blockedId])
+}
