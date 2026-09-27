@@ -58,7 +58,7 @@ export function LogoMark({ className, boxed }: { className?: string; boxed?: boo
 }
 
 /** `boxed` = ícone em quadrado preto (fundos claros); "Scan" acompanha o tema. Solta = superfície escura. */
-export function Logo({ className, boxed, tagline }: { className?: string; boxed?: boolean; tagline?: boolean }) {
+export function Logo({ className, boxed, tagline, taglineClassName }: { className?: string; boxed?: boolean; tagline?: boolean; taglineClassName?: string }) {
   return (
     <span className={cn("flex items-center gap-2.5", className)}>
       <LogoMark boxed={boxed} />
@@ -66,7 +66,7 @@ export function Logo({ className, boxed, tagline }: { className?: string; boxed?
         <span className="text-[17px] font-bold tracking-[-0.01em]">
           Lead<span className={boxed ? "text-brand-ink" : "text-lime"}>Scan</span>
         </span>
-        {tagline && <span className="mt-1 whitespace-nowrap text-[7px] font-medium tracking-[0.12em] opacity-75">CONECTANDO NEGÓCIOS COM DADOS</span>}
+        {tagline && <span className={cn("mt-1 whitespace-nowrap text-[7px] font-medium tracking-[0.12em] opacity-75", taglineClassName)}>CONECTANDO NEGÓCIOS COM DADOS</span>}
       </span>
     </span>
   );

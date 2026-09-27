@@ -52,20 +52,20 @@ export default async function Home() {
   return (
     <div className="min-h-dvh bg-background">
       <header className="sticky top-0 z-30 border-b border-white/10 bg-ink/95 text-white backdrop-blur-sm">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
-          <Logo tagline />
-          <nav className="flex items-center gap-2">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-4 sm:gap-4 sm:px-6">
+          <Logo tagline className="min-w-0" taglineClassName="max-[419px]:hidden" />
+          <nav className="flex shrink-0 items-center gap-1 sm:gap-2">
             <Link href="#como-funciona" className="hidden px-3 text-sm text-white/70 transition-colors hover:text-white md:inline">
               Como funciona
             </Link>
             <Link href="#comunidade" className="hidden px-3 text-sm text-white/70 transition-colors hover:text-white md:inline">
               Comunidade
             </Link>
-            <Button asChild variant="ghost" className="text-white hover:bg-white/10 hover:text-white">
+            <Button asChild variant="ghost" className="px-2.5 text-white hover:bg-white/10 hover:text-white sm:px-4">
               <Link href="/login">Entrar</Link>
             </Button>
-            <Button asChild>
-              <Link href="/login">Criar conta</Link>
+            <Button asChild className="px-3 sm:px-4">
+              <Link href="/login?criar=1">Criar conta</Link>
             </Button>
           </nav>
         </div>

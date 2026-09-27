@@ -245,6 +245,12 @@
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
   }
+  /* celular: a página nunca "anda" para os lados. clip (e não hidden) mantém o sticky funcionando;
+     rolagem horizontal só dentro de áreas próprias (kanban, tabelas, abas). */
+  html,
+  body {
+    overflow-x: clip;
+  }
   /* Números alinhados em tabelas, métricas e scores */
   .tabular {
     font-variant-numeric: tabular-nums;

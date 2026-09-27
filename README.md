@@ -137,8 +137,8 @@ Tudo em `.env` (modelo comentado em `.env.example`). Nenhuma chave vai para o na
 ## Produção
 
 1. PostgreSQL gerenciado → `DATABASE_URL`. Rode `npm run db:deploy` (= `prisma migrate deploy`, migrações em `prisma/migrations`).
-2. `AUTH_SECRET` (32+), `ENCRYPTION_KEY` (32 bytes base64, **nunca troque depois**), `NEXT_PUBLIC_APP_URL`, `AUTH_MODE="public"`.
-3. Provedor de e-mail/SMS, moderação e pelo menos um provedor de pagamento.
+2. `AUTH_SECRET` (32+), `ENCRYPTION_KEY` (32 bytes base64, **nunca troque depois**), `NEXT_PUBLIC_APP_URL`. Em produção o padrão já é `AUTH_MODE="public"` (cadastro aberto, sem demonstração); só defina `AUTH_MODE="demo"` se quiser a vitrine de testes.
+3. **Pelo menos um login** para o público criar conta: Google (`AUTH_GOOGLE_ID/SECRET`), e-mail (`RESEND_API_KEY`) ou SMS (Twilio). O login mostra só o que estiver configurado. Depois: moderação e pelo menos um provedor de pagamento.
 4. Várias instâncias: rate limit em memória (por instância) → para limite global troque por Redis/Upstash (`lib/rate-limit.ts`). A fila de buscas já reserva cada busca no banco e retoma sozinha; tempo real usa LISTEN/NOTIFY.
 5. Mídia (fotos, áudios e vídeos do chat) fica no Postgres para funcionar em qualquer hospedagem; vídeo sobe em partes de 3,5 MB e é servido em fatias. Com volume alto de vídeo, mova `lib/media/store.ts` para um storage de objetos (S3/R2) mantendo as rotas `/api/media` e `/api/chat/media`.
 6. Revise com um advogado os textos de `/termos` e `/privacidade` (modelos escritos para o funcionamento real do app) e preencha `CONTACT_EMAIL`.
@@ -148,8 +148,8 @@ Tudo em `.env` (modelo comentado em `.env.example`). Nenhuma chave vai para o na
 1. Suba o repositório no GitHub (o `.gitignore` já deixa `.env`, `node_modules`, `.next` e o client gerado do Prisma de fora).
 2. Na Vercel: **Add New → Project** → importe o repositório. Framework: Next.js (detectado). Não mude o comando de build: o `package.json` tem `vercel-build`, que roda `prisma generate`, **aplica as migrações** (`prisma migrate deploy`) e faz o `next build`.
 3. Banco: em **Storage → Neon (Postgres)** crie o banco e conecte ao projeto. A integração cria `DATABASE_URL` (com pooler, usada pelo app) e `DATABASE_URL_UNPOOLED` (direta, usada pelas migrações e pelo tempo real). Com Supabase, o equivalente é `POSTGRES_URL_NON_POOLING`; em outro provedor, defina `DIRECT_URL` e `REALTIME_DATABASE_URL` com a conexão direta.
-4. **Settings → Environment Variables**: copie do `.env.example` o que for usar. Mínimo para abrir: `AUTH_SECRET`, `ENCRYPTION_KEY`, `NEXT_PUBLIC_APP_URL` (ex.: `https://seu-projeto.vercel.app`) e `AUTH_MODE` (`demo` para testar com a conta de demonstração, `public` para abrir de verdade).
-5. Deploy. Primeiro acesso em modo demo: o botão "Explorar a demonstração" cria os dados de exemplo sozinho.
+4. **Settings → Environment Variables**: copie do `.env.example` o que for usar. Mínimo para abrir: `AUTH_SECRET`, `ENCRYPTION_KEY`, `NEXT_PUBLIC_APP_URL` (ex.: `https://seu-projeto.vercel.app`) e ao menos um login (Google, `RESEND_API_KEY` ou Twilio). Sem `AUTH_MODE`, a produção já abre em modo público; `AUTH_MODE="demo"` liga a conta de demonstração.
+5. Deploy. Em modo demo, o botão "Explorar a demonstração" cria os dados de exemplo sozinho.
 6. Domínio próprio: **Settings → Domains**; depois atualize `NEXT_PUBLIC_APP_URL` e as URLs de retorno do Google/Mercado Pago/Stripe.
 
 Limites da plataforma que o app já respeita: corpo de requisição/resposta até 4,5 MB (vídeo vai em partes; mídia sai em fatias), tempo máximo por função (busca em lote e canal ao vivo usam `maxDuration = 300`; o canal ao vivo se renova antes do limite e o navegador reconecta sozinho), várias instâncias ao mesmo tempo (pool de 5 conexões por instância; ajuste com `DB_POOL_MAX`).
