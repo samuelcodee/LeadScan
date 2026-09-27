@@ -72,9 +72,13 @@ let cached: Env | null = null;
 export function env(): Env {
   if (cached) return cached;
   // Strings vazias no .env contam como "não definido" para os defaults funcionarem.
-  const raw = Object.fromEntries(
+  const raw: Record<string, string | undefined> = Object.fromEntries(
     Object.entries(process.env).filter(([, v]) => v !== undefined && v !== ""),
   );
+  // Integrações de banco (Neon/Supabase pela Vercel, Vercel Postgres) nem sempre criam
+  // "DATABASE_URL" com esse nome exato — aceita as variações mais comuns, pooled primeiro
+  // (é a que o app usa em runtime; a direta fica para prisma.config.ts e lib/realtime.ts).
+  raw.DATABASE_URL ||= process.env.POSTGRES_PRISMA_URL || process.env.POSTGRES_URL || process.env.DATABASE_URL_UNPOOLED || process.env.POSTGRES_URL_NON_POOLING;
   const parsed = schema.safeParse(raw);
   if (!parsed.success) {
     const issues = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
