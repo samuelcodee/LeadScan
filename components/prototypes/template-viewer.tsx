@@ -21,7 +21,7 @@ export function TemplateViewer({ spec }: { spec: SiteSpec }) {
   const device = picked ?? (narrow ? "mobile" : "desktop");
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex justify-center border-b bg-card px-4 py-2">
+      <div className="flex justify-center border-b bg-card px-4 py-1.5 sm:py-2">
         <ToggleGroup type="single" variant="outline" size="sm" value={device} onValueChange={(v) => v && setDevice(v as Device)} aria-label="Dispositivo">
           <ToggleGroupItem value="desktop" aria-label="Desktop">
             <Monitor /> <span className="hidden sm:inline">Desktop</span>
@@ -34,7 +34,8 @@ export function TemplateViewer({ spec }: { spec: SiteSpec }) {
           </ToggleGroupItem>
         </ToggleGroup>
       </div>
-      <DevicePreview spec={spec} device={device} className="min-h-0 flex-1 bg-muted/60" />
+      {/* celular vendo o formato celular: o site ocupa a tela, sem desenhar um celular dentro do celular */}
+      <DevicePreview spec={spec} device={device} bare={narrow && device === "mobile"} className="min-h-0 flex-1 bg-muted/60" />
     </div>
   );
 }

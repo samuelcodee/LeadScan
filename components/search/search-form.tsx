@@ -322,7 +322,7 @@ function Chip({ children, onRemove }: { children: React.ReactNode; onRemove?: ()
     <span className="inline-flex h-6 items-center gap-1 rounded-md bg-secondary px-2 font-medium text-secondary-foreground">
       {children}
       {onRemove && (
-        <button type="button" onClick={onRemove} className="-mr-1 grid size-4 place-items-center rounded hover:bg-foreground/10" aria-label="Remover">
+        <button type="button" onClick={onRemove} className="-mr-1 grid size-4 place-items-center rounded hover:bg-foreground/10 pointer-coarse:-my-1 pointer-coarse:size-7" aria-label="Remover">
           <X className="size-3" />
         </button>
       )}

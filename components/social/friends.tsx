@@ -174,21 +174,24 @@ export function BlockDialog({ person, open, onOpenChange }: { person: Person; op
 
 /** Linha de pessoa das listas da página Amigos. */
 export function PersonRow({ peer, meta, children }: { peer: ChatPeer; meta?: React.ReactNode; children?: React.ReactNode }) {
+  // Celular: nome em cima, botões na linha de baixo (alinhados ao texto) — nada espremido.
+  // A partir de sm: tudo numa linha.
   return (
-    <li className="flex flex-wrap items-center gap-3 px-4 py-3">
-      <Link href={peer.username ? `/u/${peer.username}` : "#"} className="flex min-w-0 flex-1 items-center gap-3">
+    <li className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3">
+      <Link href={peer.username ? `/u/${peer.username}` : "#"} className="flex min-w-0 basis-full items-center gap-3 sm:basis-0 sm:flex-1">
         <UserAvatar name={peer.name} avatarId={peer.avatarId} size="md" badge={peer.badge} />
-        <span className="min-w-0">
-          <span className="flex items-center gap-1.5 truncate text-sm font-medium">
-            {peer.name} {peer.isDemo && <DemoBadge />}
+        <span className="min-w-0 flex-1">
+          <span className="flex min-w-0 items-center gap-1.5 text-sm font-medium">
+            <span className="truncate">{peer.name}</span>
+            {peer.isDemo && <DemoBadge className="shrink-0" />}
           </span>
-          <span className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-            {peer.username && <span>@{peer.username}</span>}
-            {meta}
+          <span className="flex min-w-0 items-center gap-x-2 text-xs text-muted-foreground">
+            {peer.username && <span className="truncate">@{peer.username}</span>}
+            {meta && <span className="shrink-0">{meta}</span>}
           </span>
         </span>
       </Link>
-      {children && <div className="flex flex-wrap items-center gap-1.5">{children}</div>}
+      {children && <div className="ml-[3.25rem] flex flex-wrap items-center gap-1.5 sm:ml-0">{children}</div>}
     </li>
   );
 }

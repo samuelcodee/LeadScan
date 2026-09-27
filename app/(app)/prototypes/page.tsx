@@ -57,7 +57,7 @@ export default async function PrototypesPage(props: PageProps<"/prototypes">) {
         {[
           { href: "/prototypes", label: "Seus protótipos", active: !showTemplates && !onlyFavorites },
           { href: "/prototypes?tab=favoritos", label: `Favoritos (${favoriteCount})`, active: onlyFavorites },
-          { href: "/prototypes?tab=templates", label: `Biblioteca de templates (${TEMPLATE_LIST.length})`, active: showTemplates },
+          { href: "/prototypes?tab=templates", label: `Templates (${TEMPLATE_LIST.length})`, wide: `Biblioteca de templates (${TEMPLATE_LIST.length})`, active: showTemplates },
         ].map((t) => (
           <Link
             key={t.href}
@@ -65,13 +65,21 @@ export default async function PrototypesPage(props: PageProps<"/prototypes">) {
             aria-current={t.active ? "page" : undefined}
             className={`-mb-px shrink-0 border-b-2 px-3 py-2 text-sm font-medium transition-colors duration-150 ${t.active ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
           >
-            {t.label}
+            {"wide" in t && t.wide ? (
+              <>
+                <span className="sm:hidden">{t.label}</span>
+                <span className="hidden sm:inline">{t.wide}</span>
+              </>
+            ) : (
+              t.label
+            )}
           </Link>
         ))}
       </nav>
 
       {showTemplates ? (
-        <ul className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        // celular: 2 por linha (22 templates num só por linha viravam uma rolagem enorme)
+        <ul className="mt-6 grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-3">
           {TEMPLATE_LIST.map((t) => {
             // Amostra com dados de exemplo — só para visualizar o template
             const spec = sampleSpec(t);
@@ -87,18 +95,18 @@ export default async function PrototypesPage(props: PageProps<"/prototypes">) {
                     <Eye className="size-3.5" /> Visualizar
                   </span>
                 </div>
-                <div className="border-t p-4">
-                  <div className="flex items-center gap-2">
-                    <span className="size-3 rounded-full" style={{ background: t.theme.primary }} aria-hidden />
-                    <h3 className="font-semibold">
+                <div className="border-t p-3 sm:p-4">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="size-3 shrink-0 rounded-full" style={{ background: t.theme.primary }} aria-hidden />
+                    <h3 className="min-w-0 truncate text-sm font-semibold sm:text-base">
                       <Link href={`/prototypes/templates/${t.id}`} className="after:absolute after:inset-0">
                         {t.label}
                       </Link>
                     </h3>
-                    <code className="ml-auto text-[11px] text-muted-foreground">template-{t.id}</code>
+                    <code className="ml-auto hidden shrink-0 text-[11px] text-muted-foreground lg:inline">template-{t.id}</code>
                   </div>
-                  <p className="mt-1.5 text-sm text-muted-foreground">{t.mood}</p>
-                  {usedBy.length > 0 && <p className="mt-2 text-xs text-muted-foreground">Usado em: {usedBy.join(", ")}</p>}
+                  <p className="mt-1.5 hidden text-sm text-muted-foreground sm:block">{t.mood}</p>
+                  {usedBy.length > 0 && <p className="mt-1 line-clamp-2 text-xs text-muted-foreground sm:mt-2">Usado em: {usedBy.join(", ")}</p>}
                 </div>
               </li>
             );

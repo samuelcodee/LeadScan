@@ -45,8 +45,18 @@ function Preview({ c }: { c: ConversationItem }) {
 
 type Box = "inbox" | "requests";
 
-export function ConversationList({ initial, initialRequests = 0 }: { initial: ConversationItem[]; initialRequests?: number }) {
-  const [box, setBox] = useState<Box>("inbox");
+export function ConversationList({
+  initial,
+  initialRequests = 0,
+  initialBox = "inbox",
+}: {
+  initial: ConversationItem[];
+  initialRequests?: number;
+  /** Caixa aberta ao carregar (o servidor já manda os pedidos quando só há pedidos) */
+  initialBox?: Box;
+}) {
+  const startBox = initialBox;
+  const [box, setBox] = useState<Box>(startBox);
   const [items, setItems] = useState(initial);
   const [requests, setRequests] = useState(initialRequests);
   const [filter, setFilter] = useState("");
@@ -54,7 +64,7 @@ export function ConversationList({ initial, initialRequests = 0 }: { initial: Co
   const [now, setNow] = useState(() => Date.now());
   const params = useParams<{ id?: string }>();
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const boxRef = useRef<Box>("inbox");
+  const boxRef = useRef<Box>(startBox);
 
   const load = useCallback(
     () =>
@@ -147,6 +157,16 @@ export function ConversationList({ initial, initialRequests = 0 }: { initial: Co
           <div className="grid place-items-center px-6 py-14 text-center">
             <p className="font-medium">Nenhum pedido de mensagem</p>
             <p className="mt-1 max-w-xs text-sm text-muted-foreground">Quando alguém que não é seu amigo escrever, a conversa aparece aqui.</p>
+          </div>
+        ) : items.length === 0 && requests > 0 ? (
+          <div className="grid place-items-center px-6 py-14 text-center">
+            <p className="font-medium">Nenhuma conversa aceita ainda</p>
+            <p className="mt-1 max-w-xs text-sm text-muted-foreground">
+              {requests === 1 ? "Tem 1 pedido de mensagem esperando você." : `Tem ${requests} pedidos de mensagem esperando você.`}
+            </p>
+            <Button className="mt-4" onClick={() => switchBox("requests")}>
+              Ver pedidos
+            </Button>
           </div>
         ) : items.length === 0 ? (
           <div className="grid place-items-center px-6 py-14 text-center">

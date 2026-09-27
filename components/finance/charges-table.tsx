@@ -46,98 +46,96 @@ async function confirmPix(c: ChargeRow) {
 
 export function ChargesTable({ rows, baseUrl }: { rows: ChargeRow[]; baseUrl: string }) {
   if (!rows.length) return <p className="py-6 text-center text-sm text-muted-foreground">Nenhuma cobrança ainda. Crie a primeira pelo botão “Cobrar”.</p>;
+  // Lista (não tabela): no celular valor, status e ações ficam sempre à vista; no computador,
+  // cada coisa na sua coluna sem quebrar valor e data em várias linhas.
   return (
-    <div className="relative -mx-5 overflow-x-auto">
-      <table className="w-full min-w-[640px] text-sm">
-        <thead>
-          <tr className="border-b text-left text-xs text-muted-foreground">
-            <th className="px-5 py-2 font-medium">Cliente / descrição</th>
-            <th className="px-3 py-2 font-medium">Status</th>
-            <th className="px-3 py-2 text-right font-medium">Valor</th>
-            <th className="px-3 py-2 font-medium">Meio</th>
-            <th className="px-3 py-2 font-medium">Data</th>
-            <th className="w-12 px-5 py-2">
-              <span className="sr-only">Ações</span>
-            </th>
-          </tr>
-        </thead>
-        <tbody className="divide-y">
-          {rows.map((c) => {
-            const st = STATUS[c.status] ?? STATUS.PENDING;
-            const url = `${baseUrl}/pagar/${c.slug}`;
-            return (
-              <tr key={c.id} className="align-middle">
-                <td className="max-w-[260px] px-5 py-2.5">
-                  <div className="flex items-center gap-1.5">
-                    {(c.isTest || c.lead?.isDemo) && <DemoBadge />}
-                    {c.lead ? (
-                      <Link href={`/leads/${c.lead.id}`} className="truncate font-medium hover:underline">
-                        {c.lead.name}
-                      </Link>
-                    ) : (
-                      <span className="truncate font-medium">Sem lead</span>
-                    )}
-                  </div>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {c.description} · {PROVIDER[c.provider] ?? c.provider}
-                    {c.provider === "pix" && c.bankAccount ? ` (${c.bankAccount.bankName})` : ""}
-                  </p>
+    <ul className="-mx-5 -my-2 divide-y">
+      {rows.map((c) => {
+        const st = STATUS[c.status] ?? STATUS.PENDING;
+        const url = `${baseUrl}/pagar/${c.slug}`;
+        const when = formatDate(c.paidAt ?? c.createdAt, "time");
+        const method = c.paidMethod ? METHOD[c.paidMethod] : null;
+        const chip = <span className={cn("inline-flex h-6 shrink-0 items-center rounded-full px-2.5 text-xs font-medium", st.className)}>{st.label}</span>;
+        return (
+          <li key={c.id} className="flex items-start gap-3 px-5 py-3 text-sm">
+            <div className="min-w-0 flex-1">
+              <div className="flex min-w-0 items-center gap-1.5">
+                {(c.isTest || c.lead?.isDemo) && <DemoBadge className="shrink-0" />}
+                {c.lead ? (
+                  <Link href={`/leads/${c.lead.id}`} className="truncate font-medium hover:underline">
+                    {c.lead.name}
+                  </Link>
+                ) : (
+                  <span className="truncate font-medium">Sem lead</span>
+                )}
+              </div>
+              <p className="truncate text-xs text-muted-foreground">
+                {c.description} · {PROVIDER[c.provider] ?? c.provider}
+                {c.provider === "pix" && c.bankAccount ? ` (${c.bankAccount.bankName})` : ""}
+              </p>
+              {/* celular: status, meio e data numa linha só embaixo */}
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground sm:hidden">
+                {chip}
+                {method && <span>{method}</span>}
+                <span className="tabular">{when}</span>
+              </div>
+              {c.provider === "pix" && c.status === "PENDING" && (
+                <Button size="sm" variant="outline" className="mt-2" onClick={() => void confirmPix(c)}>
+                  <CheckCircle2 /> Já caiu na conta? Marcar como recebido
+                </Button>
+              )}
+            </div>
+            <div className="hidden w-24 shrink-0 pt-0.5 sm:block">{chip}</div>
+            {/* largura fixa no computador: a coluna de status fica alinhada de cima a baixo */}
+            <div className="shrink-0 text-right sm:w-36">
+              <p className="font-semibold whitespace-nowrap tabular">{formatBRL(c.amountCents)}</p>
+              {c.netCents !== null && c.status === "PAID" && c.netCents !== c.amountCents && (
+                <p className="text-xs whitespace-nowrap text-muted-foreground tabular">líq. {formatBRL(c.netCents)}</p>
+              )}
+              <p className="hidden text-xs whitespace-nowrap text-muted-foreground sm:block">
+                {method ? `${method} · ` : ""}
+                <span className="tabular">{when}</span>
+              </p>
+            </div>
+            <div className="-mr-2 -mt-1 shrink-0">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon-sm" aria-label={`Ações da cobrança ${c.description}`}>
+                    <MoreHorizontal />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={() => navigator.clipboard.writeText(url).then(() => toast.success("Link copiado"))}>
+                    <Copy /> Copiar link
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <a href={url} target="_blank" rel="noopener noreferrer">
+                      <ExternalLink /> Abrir página de pagamento
+                    </a>
+                  </DropdownMenuItem>
                   {c.provider === "pix" && c.status === "PENDING" && (
-                    <button type="button" onClick={() => void confirmPix(c)} className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-foreground underline underline-offset-2">
-                      <CheckCircle2 className="size-3.5" /> Já caiu na conta? Marcar como recebido
-                    </button>
+                    <DropdownMenuItem onSelect={() => void confirmPix(c)}>
+                      <CheckCircle2 /> Marcar como recebido
+                    </DropdownMenuItem>
                   )}
-                </td>
-                <td className="px-3 py-2.5">
-                  <span className={cn("inline-flex h-6 items-center rounded-full px-2.5 text-xs font-medium", st.className)}>{st.label}</span>
-                </td>
-                <td className="px-3 py-2.5 text-right">
-                  <span className="font-semibold tabular">{formatBRL(c.amountCents)}</span>
-                  {c.netCents !== null && c.status === "PAID" && <p className="text-xs text-muted-foreground tabular">líq. {formatBRL(c.netCents)}</p>}
-                </td>
-                <td className="px-3 py-2.5 text-muted-foreground">{c.paidMethod ? METHOD[c.paidMethod] : "—"}</td>
-                <td className="px-3 py-2.5 text-muted-foreground tabular">{formatDate(c.paidAt ?? c.createdAt, "time")}</td>
-                <td className="px-5 py-2.5 text-right">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon-sm" aria-label={`Ações da cobrança ${c.description}`}>
-                        <MoreHorizontal />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onSelect={() => navigator.clipboard.writeText(url).then(() => toast.success("Link copiado"))}>
-                        <Copy /> Copiar link
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <a href={url} target="_blank" rel="noopener noreferrer">
-                          <ExternalLink /> Abrir página de pagamento
-                        </a>
-                      </DropdownMenuItem>
-                      {c.provider === "pix" && c.status === "PENDING" && (
-                        <DropdownMenuItem onSelect={() => void confirmPix(c)}>
-                          <CheckCircle2 /> Marcar como recebido
-                        </DropdownMenuItem>
-                      )}
-                      {c.status === "PENDING" && (
-                        <DropdownMenuItem
-                          variant="destructive"
-                          onSelect={async () => {
-                            const r = await cancelChargeAction({ id: c.id });
-                            if (r.ok) toast.success("Cobrança cancelada");
-                            else toast.error(r.error);
-                          }}
-                        >
-                          <Ban /> Cancelar cobrança
-                        </DropdownMenuItem>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+                  {c.status === "PENDING" && (
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onSelect={async () => {
+                        const r = await cancelChargeAction({ id: c.id });
+                        if (r.ok) toast.success("Cobrança cancelada");
+                        else toast.error(r.error);
+                      }}
+                    >
+                      <Ban /> Cancelar cobrança
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
   );
 }

@@ -125,7 +125,7 @@ export default async function FinancePage(props: PageProps<"/financeiro">) {
                   href={`/financeiro?periodo=${id}`}
                   scroll={false}
                   aria-current={range === id ? "page" : undefined}
-                  className={cn("rounded px-2.5 py-1 font-medium text-muted-foreground", range === id && "bg-background text-foreground shadow-sm")}
+                  className={cn("rounded px-2.5 py-1 font-medium text-muted-foreground pointer-coarse:px-3.5 pointer-coarse:py-2", range === id && "bg-background text-foreground shadow-sm")}
                 >
                   {label}
                 </Link>

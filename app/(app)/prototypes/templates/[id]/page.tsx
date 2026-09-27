@@ -31,10 +31,10 @@ export default async function TemplatePage(props: PageProps<"/prototypes/templat
   return (
     // sem a barra inferior do celular (ela some em /prototypes/*): a prévia usa a tela toda
     <div data-fullbleed className="flex h-[calc(100dvh-3.5rem-1px)] flex-col">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-4 py-3 sm:px-6">
-        <Button asChild variant="ghost" size="sm" className="-ml-2">
+      <div className="flex items-center gap-x-3 border-b px-4 py-2.5 sm:gap-x-4 sm:px-6 sm:py-3">
+        <Button asChild variant="ghost" size="sm" className="-ml-2 shrink-0" aria-label="Voltar para os templates">
           <Link href="/prototypes?tab=templates">
-            <ArrowLeft /> Templates
+            <ArrowLeft /> <span className="hidden sm:inline">Templates</span>
           </Link>
         </Button>
         <div className="min-w-0 flex-1">
@@ -50,7 +50,7 @@ export default async function TemplatePage(props: PageProps<"/prototypes/templat
             {usedBy.length > 0 && ` · Usado em: ${usedBy.join(", ")}`}
           </p>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1">
           <Button asChild variant="outline" size="icon-sm" aria-label={`Anterior: ${prev.label}`} title={prev.label}>
             <Link href={`/prototypes/templates/${prev.id}`}>
               <ChevronLeft />
@@ -64,7 +64,10 @@ export default async function TemplatePage(props: PageProps<"/prototypes/templat
         </div>
       </div>
       <p className="border-b bg-muted/40 px-4 py-2 text-xs text-muted-foreground sm:px-6">
-        Empresa fictícia, só para mostrar o visual. Para usar: abra um lead e toque em “Criar protótipo”; no estúdio, troque para este template.
+        <span className="sm:hidden">Empresa fictícia. Para usar, crie o protótipo num lead e troque para este template.</span>
+        <span className="hidden sm:inline">
+          Empresa fictícia, só para mostrar o visual. Para usar: abra um lead e toque em “Criar protótipo”; no estúdio, troque para este template.
+        </span>
       </p>
       <TemplateViewer spec={sampleSpec(t)} />
     </div>

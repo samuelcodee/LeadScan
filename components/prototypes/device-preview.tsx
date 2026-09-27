@@ -20,12 +20,15 @@ export function DevicePreview({
   selectedId,
   onSelectSection,
   className,
+  bare,
 }: {
   spec: SiteSpec;
   device: Device;
   selectedId?: string | null;
   onSelectSection?: (id: string) => void;
   className?: string;
+  /** Sem moldura e sem margem: o site ocupa o quadro todo (ex.: formato celular visto num celular). */
+  bare?: boolean;
 }) {
   const stage = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
@@ -39,11 +42,15 @@ export function DevicePreview({
   }, []);
 
   const width = DEVICE_WIDTH[device];
-  const chrome = device === "desktop" ? 36 : 0;
-  const pad = device === "desktop" ? 0 : 20;
+  const chrome = device === "desktop" && !bare ? 36 : 0;
+  const pad = device === "desktop" || bare ? 0 : 20;
   const scale = box.w ? Math.min(1, (box.w - pad * 2) / width) : 0;
   // Altura do "aparelho": mobile tem proporção de celular; tablet/desktop ocupam a altura disponível
-  const frameH = device === "mobile" ? Math.min(844, (box.h - pad * 2) / scale || 844) : Math.max(480, (box.h - pad * 2 - chrome * scale) / (scale || 1));
+  const frameH = bare
+    ? Math.max(320, box.h / (scale || 1))
+    : device === "mobile"
+      ? Math.min(844, (box.h - pad * 2) / scale || 844)
+      : Math.max(480, (box.h - pad * 2 - chrome * scale) / (scale || 1));
   const domain = `www.${slugify(spec.business.name).replace(/-/g, "") || "seusite"}.com.br`;
 
   return (
@@ -56,12 +63,13 @@ export function DevicePreview({
           <div
             className={cn(
               "overflow-hidden bg-white shadow-[0_1px_2px_rgba(0,0,0,0.06),0_12px_40px_-12px_rgba(0,0,0,0.25)]",
-              device === "mobile" && "rounded-[44px] border-[10px] border-neutral-900",
-              device === "tablet" && "rounded-[28px] border-[12px] border-neutral-900",
-              device === "desktop" && "rounded-lg border border-black/10",
+              !bare && device === "mobile" && "rounded-[44px] border-[10px] border-neutral-900",
+              !bare && device === "tablet" && "rounded-[28px] border-[12px] border-neutral-900",
+              !bare && device === "desktop" && "rounded-lg border border-black/10",
+              bare && "shadow-none",
             )}
           >
-            {device === "desktop" && (
+            {device === "desktop" && !bare && (
               <div className="flex h-9 items-center gap-3 border-b border-black/10 bg-neutral-100 px-3" aria-hidden>
                 <div className="flex gap-1.5">
                   <span className="size-2.5 rounded-full bg-neutral-300" />

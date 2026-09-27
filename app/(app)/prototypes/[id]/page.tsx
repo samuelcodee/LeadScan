@@ -19,30 +19,38 @@ export default async function PrototypePage(props: PageProps<"/prototypes/[id]">
     include: { lead: { select: { id: true, name: true, isDemo: true, phone: true, whatsapp: true, photos: true } } },
   });
   if (!proto) notFound();
-  const conns = (await listConnections(user.id)).filter((c) => c.status === "ACTIVE");
+  // Tudo que o estúdio precisa sai numa rodada só (antes eram 6 consultas em fila)
+  const [allConns, base, versions, library, shareUrl, aiEnabled] = await Promise.all([
+    listConnections(user.id),
+    appUrl(),
+    db.prototype.findMany({
+      where: { leadId: proto.leadId, userId: user.id },
+      orderBy: { version: "asc" },
+      select: { id: true, name: true, createdAt: true },
+    }),
+    recentPhotoUrls(user.id),
+    proto.shareEnabled && proto.shareSlug ? proposalUrl(proto.shareSlug) : Promise.resolve(null),
+    isAIEnabled(user.id),
+  ]);
+  const conns = allConns.filter((c) => c.status === "ACTIVE");
   const ai = {
     connected: conns.map((c) => ({ id: c.provider, name: getAiProvider(c.provider)?.name ?? c.provider })),
     defaultId: user.aiDefault,
     imageProviders: conns
       .filter((c) => c.provider === "gemini" || c.provider === "openai")
       .map((c) => ({ id: c.provider as "gemini" | "openai", label: getAiProvider(c.provider)?.image?.label ?? c.provider })),
-    base: await appUrl(),
+    base,
   };
-  const versions = await db.prototype.findMany({
-    where: { leadId: proto.leadId, userId: user.id },
-    orderBy: { version: "asc" },
-    select: { id: true, name: true, createdAt: true },
-  });
   return (
     <Studio
       key={proto.id}
       prototype={{ id: proto.id, name: proto.name, spec: parseSpec(proto.spec) }}
       lead={{ id: proto.lead.id, name: proto.lead.name, isDemo: proto.lead.isDemo, phone: proto.lead.phone, whatsapp: proto.lead.whatsapp }}
       // fotos do negócio primeiro, depois as enviadas em Arquivos
-      leadPhotos={[...leadPhotos(proto.lead).photos, ...(await recentPhotoUrls(user.id))]}
+      leadPhotos={[...leadPhotos(proto.lead).photos, ...library]}
       versions={versions}
-      initialShareUrl={proto.shareEnabled && proto.shareSlug ? await proposalUrl(proto.shareSlug) : null}
-      aiEnabled={await isAIEnabled(user.id)}
+      initialShareUrl={shareUrl}
+      aiEnabled={aiEnabled}
       ai={ai}
     />
   );

@@ -2,7 +2,7 @@
 
 import { Copy, Download, FileAudio, FileVideo, ImageIcon, Loader2, MoreHorizontal, Pencil, Trash2, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { deleteFileAction, renameFileAction } from "@/app/actions/files";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Input } from "@/components/ui/input";
 import { shrinkImage } from "@/lib/client/image";
 import { PART_BYTES, postForm, uploadInParts } from "@/lib/client/upload";
+import { thumbUrl } from "@/lib/media/thumb";
 import { cn } from "@/lib/utils";
 
 /* eslint-disable @next/next/no-img-element -- imagens do próprio app (/api/media), já otimizadas no envio */
@@ -142,10 +143,18 @@ function FileCard({ f, onOpen }: { f: LibraryFile; onOpen: () => void }) {
       <button type="button" onClick={onOpen} className="block w-full text-left" aria-label={`Abrir ${labelOf(f)}`}>
         <div className="grid aspect-[4/3] place-items-center overflow-hidden bg-muted">
           {photo ? (
-            <img src={urlOf(f)} alt="" loading="lazy" className="size-full object-cover transition-transform duration-200 group-hover:scale-[1.02]" />
+            // miniatura de 480 px (a foto inteira só abre no visualizador)
+            <img
+              src={thumbUrl(urlOf(f), 480)}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              width={480}
+              height={360}
+              className="size-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
+            />
           ) : f.kind === "FILE_VIDEO" ? (
-            // #t=0.1 faz o navegador mostrar um quadro do vídeo como capa
-            <video src={`${urlOf(f)}#t=0.1`} preload="metadata" muted playsInline className="pointer-events-none size-full object-cover" />
+            <VideoThumb src={urlOf(f)} />
           ) : (
             <FileAudio className="size-10 text-muted-foreground" aria-hidden />
           )}
@@ -265,4 +274,30 @@ export function StorageMeter({ used, quota }: { used: number; quota: number }) {
       </div>
     </div>
   );
+}
+
+/**
+ * Capa do vídeo: só pede o arquivo quando o card chega perto da tela. Com 30 vídeos na lista,
+ * abrir a página não dispara 30 downloads (cada um é uma leitura no banco).
+ */
+function VideoThumb({ src }: { src: string }) {
+  const ref = useRef<HTMLVideoElement>(null);
+  const [near, setNear] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setNear(true);
+          io.disconnect();
+        }
+      },
+      { rootMargin: "300px 0px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  // #t=0.1 faz o navegador mostrar um quadro do vídeo como capa
+  return <video ref={ref} src={near ? `${src}#t=0.1` : undefined} preload={near ? "metadata" : "none"} muted playsInline className="pointer-events-none size-full object-cover" />;
 }

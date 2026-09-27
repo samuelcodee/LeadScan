@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { shrinkImage } from "@/lib/client/image";
 import { INTERNAL_IMAGE_RE } from "@/lib/templates/constants";
+import { thumbUrl } from "@/lib/media/thumb";
 import { cn } from "@/lib/utils";
 
 export function TextField({
@@ -86,7 +87,7 @@ export function ImageField({ label, value, onChange, suggestions }: { label: str
       </Label>
       <div className="flex gap-2">
         {value ? (
-          <img src={value} alt="" className="size-9 shrink-0 rounded-md object-cover" />
+          <img src={thumbUrl(value, 160)} alt="" className="size-9 shrink-0 rounded-md object-cover" />
         ) : (
           <span className="size-9 shrink-0 rounded-md bg-muted" />
         )}
@@ -127,7 +128,7 @@ export function ImageField({ label, value, onChange, suggestions }: { label: str
             className={cn("overflow-hidden rounded-md ring-offset-2 ring-offset-background", value === src ? "ring-2 ring-foreground" : "opacity-80 hover:opacity-100")}
             aria-label="Usar esta foto"
           >
-            <img src={src.startsWith("https://images.unsplash.com") ? src.replace(/w=\d+/, "w=120") : src} alt="" className="h-10 w-14 object-cover" loading="lazy" />
+            <img src={thumbUrl(src, 160)} alt="" className="h-10 w-14 object-cover" loading="lazy" />
           </button>
         ))}
       </div>

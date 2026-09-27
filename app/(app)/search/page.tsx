@@ -71,7 +71,16 @@ export default async function SearchPage(props: PageProps<"/search">) {
   const providerLabel = providers.find((p) => p.id === result.search.provider)?.label ?? result.search.provider;
   // Mesma busca de novo = próxima leva da varredura (buscas antigas com parâmetros diferentes ficam sem o botão)
   const again = searchRequestSchema.safeParse(result.search.params);
-  const sweeps = again.success ? await sweepStatus(user.id, result.search) : [];
+  // Varredura e IA em paralelo (antes eram consultas uma atrás da outra)
+  const [sweeps, aiEnabled] = await Promise.all([again.success ? sweepStatus(user.id, result.search) : [], isAIEnabled(user.id)]);
+  const nextBatch =
+    again.success && result.search.status !== "RUNNING" && result.search.status !== "QUEUED" ? (
+      <NextBatch
+        input={{ ...again.data, provider: again.data.provider ?? defaultProviderId() }}
+        regional={again.data.cities.length === 0}
+        sweeps={sweeps.map((s) => ({ label: s.label, city: s.city, found: s.found, exhausted: s.exhausted }))}
+      />
+    ) : null;
 
   return (
     <div>
@@ -83,22 +92,12 @@ export default async function SearchPage(props: PageProps<"/search">) {
           </p>
         </div>
         {result.search.error && <p className="mb-3 rounded-md bg-warning-soft px-3 py-2 text-sm text-warning">{result.search.error}</p>}
-        {again.success && result.search.status !== "RUNNING" && result.search.status !== "QUEUED" && (
-          <NextBatch
-            input={{ ...again.data, provider: again.data.provider ?? defaultProviderId() }}
-            regional={again.data.cities.length === 0}
-            sweeps={sweeps.map((s) => ({ label: s.label, city: s.city, found: s.found, exhausted: s.exhausted }))}
-          />
-        )}
+        {nextBatch}
         {form(result.search.query ?? undefined)}
       </div>
-      <ResultsView
-        key={result.search.id}
-        leads={result.leads}
-        initialFilters={filtersFromParams(sp)}
-        initialSelected={one(sp.lead) ?? null}
-        aiEnabled={await isAIEnabled(user.id)}
-      />
+      <ResultsView key={result.search.id} leads={result.leads} initialFilters={filtersFromParams(sp)} initialSelected={one(sp.lead) ?? null} aiEnabled={aiEnabled} />
+      {/* celular: a próxima leva também no fim da lista (sem rolar 50 cards de volta ao topo) */}
+      {nextBatch && result.leads.length > 0 && <div className="px-4 pb-6 lg:hidden">{nextBatch}</div>}
     </div>
   );
 }
