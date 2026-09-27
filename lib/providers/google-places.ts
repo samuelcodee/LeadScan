@@ -6,7 +6,8 @@ import { fold } from "@/lib/format";
 import { hashKey } from "@/lib/hash";
 import { cachedProviderCall } from "@/lib/providers/cache";
 import { advanceGrid, cellRect, currentCell, isGridCursor, startGrid, type GridCursor, type Rect } from "@/lib/providers/grid";
-import { ProviderError, type DataProvider, type ProviderBusiness, type ProviderQuery, type SweepPage } from "@/lib/providers/types";
+import { reserveGoogleRequest } from "@/lib/providers/usage";
+import { ProviderError, QuotaExhaustedError, type DataProvider, type ProviderBusiness, type ProviderQuery, type SweepPage } from "@/lib/providers/types";
 
 /**
  * Google Maps — Places API (New), Text Search.
@@ -130,6 +131,8 @@ async function pace(ms = 120) {
 }
 
 async function textSearch(body: Record<string, unknown>, fieldMask: string, signal?: AbortSignal) {
+  // Trava da cota grátis: cada requisição reserva uma vaga no contador do mês antes de sair
+  if (!(await reserveGoogleRequest())) throw new QuotaExhaustedError();
   await pace();
   const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
     method: "POST",

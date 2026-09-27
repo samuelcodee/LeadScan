@@ -43,6 +43,10 @@ const schema = z.object({
   /** Vazio = "mock" (empresas fictícias) no modo demo e "osm" (OpenStreetMap, dados reais) no público. */
   DATA_PROVIDER: z.enum(["mock", "osm", "google"]).optional(),
   MAPS_API_KEY: z.string().default(""),
+  /** Teto de requisições ao Google por mês (padrão 900, abaixo das 1.000 grátis). Chegou nele, a busca usa o OpenStreetMap. */
+  GOOGLE_MAPS_MONTHLY_LIMIT: z.coerce.number().int().min(0).max(1_000_000).default(900),
+  /** Fotos do Google têm cota própria e são cobradas por foto: desligadas se não for "true". */
+  GOOGLE_MAPS_PHOTOS: bool,
   OVERPASS_URL: z.string().url().default("https://overpass-api.de/api/interpreter"),
   DATA_PROVIDER_API_KEY: z.string().default(""),
 
@@ -113,6 +117,9 @@ export const isDemoMode = () => env().AUTH_MODE === "demo";
  * Uma chave esquecida na hospedagem, sozinha, nunca gera cobrança (busca e fotos ficam no grátis).
  */
 export const googleMapsEnabled = () => env().DATA_PROVIDER === "google" && env().MAPS_API_KEY.length > 0;
+
+/** Fotos reais do Google (cobradas por foto): só com o Google ligado E GOOGLE_MAPS_PHOTOS=true. */
+export const googlePhotosEnabled = () => googleMapsEnabled() && env().GOOGLE_MAPS_PHOTOS === true;
 
 /** Fonte de empresas padrão: OpenStreetMap (grátis). Versão pública nunca usa dados fictícios. */
 export const dataProviderId = () => {

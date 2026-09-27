@@ -752,3 +752,13 @@ model BankAccount {
 
   @@index([userId])
 }
+
+// ─── Uso de APIs pagas ───────────────────────────────────────────
+
+/// Requisições a uma API paga no mês (ex.: google:2026-09). Trava a cota grátis antes de virar cobrança.
+model ApiUsage {
+  /// provedor:AAAA-MM (mês em UTC)
+  key       String   @id
+  count     Int      @default(0)
+  updatedAt DateTime @updatedAt
+}

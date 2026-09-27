@@ -9,7 +9,8 @@ import { backfillDedupeKeys, excludeKnown, filterSuppressed, upsertLeads } from 
 import { logger } from "@/lib/logger";
 import { getProvider } from "@/lib/providers";
 import { cachedProviderCall } from "@/lib/providers/cache";
-import { ProviderError, type DataProvider, type ProviderBusiness, type ProviderQuery, type SweepPage } from "@/lib/providers/types";
+import { googleUsage } from "@/lib/providers/usage";
+import { ProviderError, QuotaExhaustedError, type DataProvider, type ProviderBusiness, type ProviderQuery, type SweepPage } from "@/lib/providers/types";
 
 const lastCallAt = new Map<string, number>();
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -134,14 +135,22 @@ async function planTasks(userId: string, req: SearchRequest, provider: DataProvi
 }
 
 /** Cria o registro da busca. Buscas simples rodam na hora; lotes vão para a fila. */
+/** Fonte da busca: a pedida, mas o Google com a cota grátis do mês usada vira OpenStreetMap. */
+async function resolveProvider(id: SearchRequest["provider"]) {
+  const provider = getProvider(id);
+  if (provider.id === "google" && (await googleUsage()).left <= 0) return { provider: getProvider("osm"), quotaOut: true };
+  return { provider, quotaOut: false };
+}
+
 export async function createSearch(userId: string, req: SearchRequest) {
-  const provider = getProvider(req.provider);
+  const { provider, quotaOut } = await resolveProvider(req.provider);
   const total = req.cities.length ? req.categories.length * req.cities.length : req.categories.length * regionBudget(provider).maxCities;
   return db.search.create({
     data: {
       userId,
       query: req.query?.trim() || describeSearch(req),
-      params: { ...req, provider: provider.id } as unknown as Prisma.InputJsonValue,
+      // quotaFallback: pediu Google, mas a cota do mês acabou (a tela explica a troca)
+      params: { ...req, provider: provider.id, ...(quotaOut ? { quotaFallback: true } : {}) } as unknown as Prisma.InputJsonValue,
       provider: provider.id,
       status: "QUEUED",
       total,
@@ -167,7 +176,9 @@ export async function runSearchJob(searchId: string) {
   if (!search || search.status === "DONE") return;
   const userId = search.userId;
   const req = { cities: [], ...(search.params as object) } as unknown as SearchRequest & { provider: DataProvider["id"] };
-  const provider = getProvider(req.provider);
+  const resolved = await resolveProvider(req.provider);
+  const provider = resolved.provider;
+  const quotaOut = resolved.quotaOut || (search.params as { quotaFallback?: boolean }).quotaFallback === true;
   const regional = req.cities.length === 0;
   const { tasks, rotation, regionDone } = await planTasks(userId, req, provider);
   const { spread } = regionBudget(provider);
@@ -190,6 +201,7 @@ export async function runSearchJob(searchId: string) {
   let done = resumeAt;
   let stoppedEarly = false;
   let failures = 0;
+  let quotaHit = false;
 
   const top = () => [...new Map(collected.map((c) => [c.id, c])).values()].sort((a, b) => b.score - a.score).slice(0, req.limit);
 
@@ -225,6 +237,7 @@ export async function runSearchJob(searchId: string) {
         }
       }
     } catch (err) {
+      if (err instanceof QuotaExhaustedError) quotaHit = true;
       failed = true;
       failures++;
       const msg = err instanceof ProviderError ? err.message : "Falha ao consultar a fonte de dados.";
@@ -249,7 +262,7 @@ export async function runSearchJob(searchId: string) {
   // Várias cidades ao mesmo tempo (cada uma num servidor diferente da fonte); grava a cada rodada
   for (let i = resumeAt; i < tasks.length; i += concurrency) {
     const missing = req.limit - top().length;
-    if (missing <= 0) break;
+    if (missing <= 0 || quotaHit) break;
     if (Date.now() - startedAt > JOB_BUDGET_MS) {
       stoppedEarly = true;
       break;
@@ -292,7 +305,8 @@ export async function runSearchJob(searchId: string) {
   const unique = top();
   const failedAll = unique.length === 0 && errors.length > 0;
   const source = provider.isDemo ? "na demonstração" : `no ${provider.label}`;
-  const notes = [...errors.slice(0, 3)];
+  const notes = [...new Set(errors)].slice(0, 3);
+  if (quotaOut) notes.unshift("A cota grátis do Google Maps deste mês acabou: esta busca usou o OpenStreetMap (grátis). O Google volta quando o mês virar.");
   if (stoppedEarly && unique.length === 0 && errors.length) {
     // a fonte caiu logo de cara: a mensagem do erro já explica (ex.: servidores lentos)
   } else if (stoppedEarly) {

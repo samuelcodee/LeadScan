@@ -94,3 +94,10 @@ export class ProviderError extends Error {
     super(message);
   }
 }
+
+/** A cota grátis do mês da fonte paga acabou: nada mais é chamado até virar o mês. */
+export class QuotaExhaustedError extends ProviderError {
+  constructor() {
+    super("A cota grátis do Google Maps deste mês acabou. As próximas buscas usam o OpenStreetMap até o mês virar.");
+  }
+}

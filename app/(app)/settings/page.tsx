@@ -9,6 +9,7 @@ import { integrationStatus } from "@/lib/env";
 import { formatInt } from "@/lib/format";
 import { DEMO_USER_NAME } from "@/lib/outreach/service";
 import { listProviders } from "@/lib/providers";
+import { googleUsage } from "@/lib/providers/usage";
 import { cn } from "@/lib/utils";
 import { formatPhone } from "@/lib/whatsapp/phone";
 
@@ -39,7 +40,7 @@ export default async function SettingsPage() {
   const user = await requireUser();
   const status = integrationStatus();
   const providers = listProviders();
-  const [usage, suppressed] = await Promise.all([aiUsageSummary(), db.suppression.count()]);
+  const [usage, suppressed, google] = await Promise.all([aiUsageSummary(), db.suppression.count(), status.googleConfigured ? googleUsage() : null]);
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
@@ -75,6 +76,24 @@ export default async function SettingsPage() {
               </li>
             ))}
           </ul>
+          {google && (
+            <div className="mt-3 rounded-lg border bg-card p-4">
+              <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
+                <span className="font-medium">Google Maps este mês</span>
+                <span className="tabular">
+                  {formatInt(google.used)} de {formatInt(google.limit)} requisições
+                </span>
+              </div>
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow={google.used} aria-valuemin={0} aria-valuemax={google.limit} aria-label="Cota do Google Maps usada">
+                <div className={google.left === 0 ? "h-full bg-destructive" : "h-full bg-chart-1"} style={{ width: `${Math.min(100, (google.used / Math.max(1, google.limit)) * 100)}%` }} />
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {google.left === 0
+                  ? "Cota do mês usada: as buscas estão no OpenStreetMap até o mês virar. Nada é cobrado."
+                  : "O teto fica abaixo das 1.000 grátis do Google. Chegou nele, a busca passa sozinha para o OpenStreetMap. Resultados guardados não contam."}
+              </p>
+            </div>
+          )}
           <p className="mt-3 text-xs text-muted-foreground">
             Padrão atual: <code className="font-mono">DATA_PROVIDER={status.dataProvider}</code>. Para adicionar outra API, implemente a interface DataProvider em
             lib/providers.
