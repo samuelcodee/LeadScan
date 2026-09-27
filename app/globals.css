@@ -250,6 +250,9 @@
   html,
   body {
     overflow-x: clip;
+    /* sem o "elástico" do iPhone/Android: a página não estica nem quica no topo e no fim,
+       e o cabeçalho e a barra de baixo ficam parados como num app */
+    overscroll-behavior-y: none;
   }
   /* Números alinhados em tabelas, métricas e scores */
   .tabular {

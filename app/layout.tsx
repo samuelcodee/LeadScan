@@ -12,6 +12,11 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  // App, não documento: a tela não amplia nem fica "solta" ao mexer (o iPhone também deixa de
+  // ampliar sozinho ao tocar num campo). Textos seguem o tamanho de fonte do sistema.
+  maximumScale: 1,
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#f7f8f9" },
     { media: "(prefers-color-scheme: dark)", color: "#0a0d0f" },

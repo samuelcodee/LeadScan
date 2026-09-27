@@ -40,7 +40,8 @@ const schema = z.object({
   SIGHTENGINE_SECRET: z.string().default(""),
 
   // Dados de empresas
-  DATA_PROVIDER: z.enum(["mock", "osm", "google"]).default("mock"),
+  /** Vazio = "mock" (empresas fictícias) no modo demo e "osm" (OpenStreetMap, dados reais) no público. */
+  DATA_PROVIDER: z.enum(["mock", "osm", "google"]).optional(),
   MAPS_API_KEY: z.string().default(""),
   OVERPASS_URL: z.string().url().default("https://overpass-api.de/api/interpreter"),
   DATA_PROVIDER_API_KEY: z.string().default(""),
@@ -107,6 +108,9 @@ export function env(): Env {
 
 export const isDemoMode = () => env().AUTH_MODE === "demo";
 
+/** Fonte de empresas padrão. Versão pública nunca usa dados fictícios. */
+export const dataProviderId = () => env().DATA_PROVIDER ?? (isDemoMode() ? "mock" : "osm");
+
 /** Pagamentos simulados: ligados por padrão no modo demo, desligados em produção pública. */
 export const mockPaymentsEnabled = () => env().PAYMENTS_MOCK ?? isDemoMode();
 
@@ -114,7 +118,7 @@ export const mockPaymentsEnabled = () => env().PAYMENTS_MOCK ?? isDemoMode();
 export function integrationStatus() {
   const e = env();
   return {
-    dataProvider: e.DATA_PROVIDER,
+    dataProvider: dataProviderId(),
     googleConfigured: e.MAPS_API_KEY.length > 0,
     aiProvider: e.AI_PROVIDER,
     aiConfigured: e.AI_PROVIDER !== "none" && e.AI_API_KEY.length > 0,

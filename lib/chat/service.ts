@@ -1,6 +1,7 @@
 import "server-only";
 import { UserFacingError } from "@/lib/action";
 import { db } from "@/lib/db";
+import { isDemoMode } from "@/lib/env";
 import type { MessageKind } from "@/lib/generated/prisma/client";
 import { badgeKeyFor } from "@/lib/gamification/levels";
 import { presenceOf } from "@/lib/chat/presence";
@@ -114,8 +115,8 @@ export async function isBlockedBetween(a: string, b: string) {
 
 /** Abre (ou reabre) a conversa com alguém pelo @. */
 export async function openConversation(meId: string, username: string) {
-  const other = await db.user.findUnique({ where: { username: username.toLowerCase() }, select: { id: true, onboardedAt: true } });
-  if (!other || !other.onboardedAt) throw new UserFacingError("Usuário não encontrado.");
+  const other = await db.user.findUnique({ where: { username: username.toLowerCase() }, select: { id: true, onboardedAt: true, isDemo: true } });
+  if (!other || !other.onboardedAt || (other.isDemo && !isDemoMode())) throw new UserFacingError("Usuário não encontrado.");
   if (other.id === meId) throw new UserFacingError("Você não pode conversar com você mesmo.");
   const key = pairKey(meId, other.id);
   const existing = await db.conversation.findUnique({ where: { pairKey: key }, select: { id: true } });
@@ -322,6 +323,8 @@ export async function findPeople(meId: string, q: string) {
       id: { not: meId },
       onboardedAt: { not: null },
       username: { not: null },
+      // Versão pública: as contas de exemplo da demonstração não aparecem para gente de verdade
+      ...(isDemoMode() ? {} : { isDemo: false }),
       OR: [{ username: { contains: term.toLowerCase() } }, { name: { contains: term, mode: "insensitive" } }],
     },
     orderBy: [{ level: "desc" }, { name: "asc" }],
