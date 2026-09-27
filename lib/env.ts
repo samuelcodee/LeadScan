@@ -72,16 +72,26 @@ type Env = Omit<z.infer<typeof schema>, "AUTH_MODE"> & { AUTH_MODE: "demo" | "pu
 
 let cached: Env | null = null;
 
+/** Tira espaços/quebras de linha das pontas e um par de aspas em volta ("valor" ou 'valor'). */
+export function cleanValue(v: string) {
+  const t = v.trim();
+  return /^(["'])[\s\S]*\1$/.test(t) && t.length >= 2 ? t.slice(1, -1).trim() : t;
+}
+
 export function env(): Env {
   if (cached) return cached;
   // Strings vazias no .env contam como "não definido" para os defaults funcionarem.
+  // Valor colado no painel da hospedagem costuma vir com espaço/quebra de linha ou entre aspas
+  // (e aí o Google responde "OAuth client was not found"): limpa antes de validar.
   const raw: Record<string, string | undefined> = Object.fromEntries(
-    Object.entries(process.env).filter(([, v]) => v !== undefined && v !== ""),
+    Object.entries(process.env)
+      .map(([k, v]) => [k, v === undefined ? v : cleanValue(v)] as const)
+      .filter(([, v]) => v !== undefined && v !== ""),
   );
   // Integrações de banco (Neon/Supabase pela Vercel, Vercel Postgres) nem sempre criam
   // "DATABASE_URL" com esse nome exato — aceita as variações mais comuns, pooled primeiro
   // (é a que o app usa em runtime; a direta fica para prisma.config.ts e lib/realtime.ts).
-  raw.DATABASE_URL ||= process.env.POSTGRES_PRISMA_URL || process.env.POSTGRES_URL || process.env.DATABASE_URL_UNPOOLED || process.env.POSTGRES_URL_NON_POOLING;
+  raw.DATABASE_URL ||= raw.POSTGRES_PRISMA_URL || raw.POSTGRES_URL || raw.DATABASE_URL_UNPOOLED || raw.POSTGRES_URL_NON_POOLING;
   const parsed = schema.safeParse(raw);
   if (!parsed.success) {
     const issues = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");

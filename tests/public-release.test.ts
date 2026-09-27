@@ -37,3 +37,13 @@ describe("versão pública", () => {
     expect(dev.loginChannels()).toEqual({ email: true, sms: true });
   });
 });
+
+describe("variáveis coladas no painel", () => {
+  it("limpa espaço, quebra de linha e aspas em volta", async () => {
+    const m = await load({ NODE_ENV: "production", AUTH_GOOGLE_ID: ' "123-abc.apps.googleusercontent.com"\n', AUTH_GOOGLE_SECRET: "GOCSPX-x \n" });
+    expect(m.env().AUTH_GOOGLE_ID).toBe("123-abc.apps.googleusercontent.com");
+    expect(m.env().AUTH_GOOGLE_SECRET).toBe("GOCSPX-x");
+    expect(m.cleanValue("  ")).toBe("");
+    expect(m.cleanValue("a\"b")).toBe("a\"b");
+  });
+});
