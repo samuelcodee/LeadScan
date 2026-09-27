@@ -8,9 +8,10 @@ import { ProviderError, type DataProvider, type ProviderBusiness, type ProviderQ
  * Google Places API (New) — Text Search.
  * Docs: https://developers.google.com/maps/documentation/places/web-service/text-search
  *
- * Custos: cada página (até 20 resultados) é uma requisição cobrada; campos como
- * telefone, site e avaliações pertencem a SKUs mais caros. Por isso: FieldMask mínimo,
- * cache no banco e paginação sob demanda.
+ * Custos: cada página (até 20 resultados) é uma requisição cobrada. Telefone, site e avaliações
+ * caem no SKU "Text Search Enterprise" (1.000 grátis/mês, depois ~US$ 35 por mil). NÃO pedir
+ * editorialSummary: ele sobe para "Enterprise + Atmosphere" (mais caro, cota grátis menor).
+ * Por isso: FieldMask mínimo, cache no banco e paginação sob demanda.
  * Termos: o Google restringe armazenar conteúdo do Places além do place_id. Revise
  * https://cloud.google.com/maps-platform/terms antes de usar em produção.
  * Instagram/WhatsApp não são fornecidos pela API → ficam "Não encontrado".
@@ -28,7 +29,6 @@ const FIELD_MASK = [
   "places.userRatingCount",
   "places.regularOpeningHours.weekdayDescriptions",
   "places.googleMapsUri",
-  "places.editorialSummary",
   "places.location",
   "places.businessStatus",
   "places.photos",
@@ -47,7 +47,6 @@ type Place = {
   userRatingCount?: number;
   regularOpeningHours?: { weekdayDescriptions?: string[] };
   googleMapsUri?: string;
-  editorialSummary?: { text: string };
   location?: { latitude: number; longitude: number };
   businessStatus?: string;
   photos?: { name: string; widthPx?: number; heightPx?: number; authorAttributions?: { displayName?: string }[] }[];
@@ -71,7 +70,7 @@ function mapPlace(p: Place, q: ProviderQuery): ProviderBusiness {
     rating: p.rating ?? null,
     reviewCount: p.userRatingCount ?? 0,
     openingHours: p.regularOpeningHours?.weekdayDescriptions ?? [],
-    description: p.editorialSummary?.text ?? null,
+    description: null,
     services: [],
     latitude: p.location?.latitude ?? null,
     longitude: p.location?.longitude ?? null,

@@ -1,6 +1,6 @@
 "use client";
 
-import { Globe, MessageCircle, Star } from "lucide-react";
+import { Globe, MapPin, MessageCircle, Star } from "lucide-react";
 import { Instagram } from "@/components/icons";
 import { warnDemoLink } from "@/components/leads/presence-icons";
 import { DemoBadge } from "@/components/common/page-header";
@@ -113,18 +113,21 @@ export function LeadCard({
               <span className="text-muted-foreground">({formatInt(lead.reviewCount)})</span>
             </Signal>
           ) : (
-            <Signal icon={<Star />} tone="muted">
+            <Signal icon={<Star />} tone="muted" href={links.maps.href} label="Ver no Google Maps">
               sem avaliações
             </Signal>
           )}
-          <Signal icon={<Globe />} tone={noOwnSite ? "opportunity" : "muted"} href={links.site.href} label={`Abrir ${links.site.label}`} onOpen={() => warnDemoLink(lead.isDemo, "o site")}>
+          <Signal icon={<Globe />} tone={noOwnSite ? "opportunity" : "muted"} href={links.site.href} label={links.site.found ? `Abrir ${links.site.label}` : "Sem site encontrado — pesquisar no Google"} onOpen={() => warnDemoLink(lead.isDemo, "o site")}>
             {site.kind === "none" ? "Sem site" : WEBSITE_KIND_LABEL[site.kind]}
           </Signal>
-          <Signal icon={<Instagram />} tone={lead.instagram ? "default" : "muted"} href={links.instagram.href} label={`Abrir Instagram ${links.instagram.label}`} onOpen={() => warnDemoLink(lead.isDemo, "o Instagram")}>
-            {lead.instagram ? `@${lead.instagram}` : "Sem Instagram"}
+          <Signal icon={<Instagram />} tone={lead.instagram ? "default" : "muted"} href={links.instagram.href} label={links.instagram.found ? `Abrir Instagram ${links.instagram.label}` : "Procurar o Instagram no Google"} onOpen={() => warnDemoLink(lead.isDemo, "o Instagram")}>
+            {lead.instagram ? `@${lead.instagram}` : "Procurar Instagram"}
           </Signal>
           <Signal icon={<MessageCircle />} tone={wa === "confirmed" ? "good" : wa === "none" ? "muted" : "default"} href={links.whatsapp.href} label="Abrir conversa no WhatsApp" onOpen={() => warnDemoLink(lead.isDemo, "o número")}>
             {wa === "confirmed" ? "WhatsApp" : wa === "likely" ? "Celular" : wa === "unknown" ? "Fixo" : "Sem telefone"}
+          </Signal>
+          <Signal icon={<MapPin />} href={links.maps.href} label="Ver no Google Maps" onOpen={() => warnDemoLink(lead.isDemo, "o endereço")}>
+            Mapa
           </Signal>
         </div>
       </div>

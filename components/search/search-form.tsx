@@ -48,7 +48,7 @@ export function SearchForm({
   const [provider, setProvider] = useState<ProviderId>(defaultProvider);
   const [filters, setFilters] = useState<Partial<SearchFilters>>({});
   const [advanced, setAdvanced] = useState(!compact);
-  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [progress, setProgress] = useState<{ done: number; total: number; found: number; href: string } | null>(null);
   const [pending, start] = useTransition();
   const parsedOnce = useRef(false);
   // Municípios do IBGE da UF escolhida (buscados sob demanda; o bundle não carrega os 5.571)
@@ -154,20 +154,26 @@ export function SearchForm({
         if (r.data.error) toast.warning(r.data.error);
         return router.push(`/search?${params}`);
       }
-      // Lote: acompanha a fila
-      setProgress({ done: 0, total: 0 });
-      for (;;) {
-        await new Promise((res) => setTimeout(res, 900));
-        const s = await getSearchStatus({ id: r.data.searchId });
-        if (!s.ok || !s.data) break;
-        setProgress({ done: s.data.progress, total: s.data.total });
-        if (s.data.status === "DONE" || s.data.status === "FAILED") {
-          if (s.data.error) toast.warning(s.data.error);
+      // Lote: acompanha o progresso. Pergunta devagar (1,5 s → 4 s): com muita gente buscando,
+      // polling a cada segundo vira carga à toa. Uma falha isolada não derruba o acompanhamento.
+      const href = `/search?${params}`;
+      setProgress({ done: 0, total: 0, found: 0, href });
+      for (let round = 0, misses = 0; ; round++) {
+        await new Promise((res) => setTimeout(res, Math.min(4000, 1500 + round * 250)));
+        const st = await getSearchStatus({ id: r.data.searchId }).catch(() => null);
+        if (!st?.ok || !st.data) {
+          if (++misses >= 4) break;
+          continue;
+        }
+        misses = 0;
+        setProgress({ done: st.data.progress, total: st.data.total, found: st.data.resultCount, href });
+        if (st.data.status === "DONE" || st.data.status === "FAILED") {
+          if (st.data.error) toast.warning(st.data.error);
           break;
         }
       }
       setProgress(null);
-      router.push(`/search?${params}`);
+      router.push(href);
     });
   };
 
@@ -176,7 +182,8 @@ export function SearchForm({
   const regionText = uf ? `${getState(uf)?.name ?? uf} · todas as cidades` : "Todo o Brasil";
 
   return (
-    <form onSubmit={submit} className="rounded-xl border bg-card p-3 shadow-soft sm:p-4">
+    <form onSubmit={submit} action="/search" method="get" className="rounded-xl border bg-card p-3 shadow-soft sm:p-4">
+      {/* action/method: se a pessoa tocar antes do JavaScript carregar, o navegador manda ?q= e a busca abre já preenchida */}
       <Label htmlFor="q" className="sr-only">
         O que você procura?
       </Label>
@@ -185,6 +192,7 @@ export function SearchForm({
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
           <Input
             id="q"
+            name="q"
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder="O que você procura? Ex.: clínicas de estética em Fortaleza sem site"
@@ -202,7 +210,10 @@ export function SearchForm({
       {progress && (
         <div className="mt-3" role="status" aria-live="polite">
           <div className="flex justify-between text-xs text-muted-foreground">
-            <span>{cities.length ? "Processando lote (uma consulta por vez, respeitando os limites da fonte)" : `Buscando em ${regionText} (cidade por cidade)`}</span>
+            <span>
+              {cities.length ? "Consultando as cidades escolhidas" : `Buscando em ${regionText}`}
+              {progress.found > 0 && <> · <span className="font-medium text-foreground">{progress.found} empresas até agora</span></>}
+            </span>
             {progress.total > 0 && (
               <span className="tabular">
                 {progress.done}/{progress.total}
@@ -212,6 +223,11 @@ export function SearchForm({
           <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
             <div className="h-full bg-chart-1 transition-[width] duration-300" style={{ width: `${(progress.done / Math.max(progress.total, 1)) * 100}%` }} />
           </div>
+          {progress.found > 0 && (
+            <button type="button" onClick={() => router.push(progress.href)} className="mt-2 text-xs font-medium text-foreground underline underline-offset-4">
+              Ver as {progress.found} já encontradas (a busca continua)
+            </button>
+          )}
         </div>
       )}
 

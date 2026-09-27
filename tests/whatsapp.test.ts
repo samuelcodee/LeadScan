@@ -9,6 +9,8 @@ describe("normalizeBrazilPhone", () => {
     ["085 3234-5678", "558532345678", false],
     ["11 3456-7890", "551134567890", false],
     ["0xx21 98765-4321", "5521987654321", true],
+    // celular antigo, sem o 9 (comum em cadastros velhos)
+    ["(85) 8765-4321", "5585987654321", true],
   ])("%s", (raw, e164, mobile) => {
     const p = normalizeBrazilPhone(raw);
     expect(p?.e164).toBe(e164);

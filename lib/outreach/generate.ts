@@ -58,9 +58,9 @@ function pickHook(ctx: OutreachContext): Hook {
   if (site.kind === "discontinued") {
     return {
       key: "discontinued",
-      short: `O link de site que aparece no Google ${a.de} (${site.host}) está fora do ar. O Google desligou esses sites em 2024.`,
-      long: `Reparei que o link de site que aparece no Google ${a.de} leva pra um endereço ${site.host}, e esses sites foram desligados pelo próprio Google em 2024. Quem clica cai numa página de erro.`,
-      question: `Vocês sabiam que o link de site ${a.de} no Google está fora do ar?`,
+      short: `O link de site ${a.de} (${site.host}) está fora do ar. O Google desligou esse tipo de site em 2024.`,
+      long: `Reparei que o link de site ${a.de} leva pra um endereço ${site.host}, e esses sites foram desligados pelo próprio Google em 2024. Quem clica cai numa página de erro.`,
+      question: `Vocês sabiam que o link de site ${a.de} está fora do ar?`,
     };
   }
   if (reviews >= 100 && rating >= 4.5 && site.kind !== "own") {
@@ -74,9 +74,9 @@ function pickHook(ctx: OutreachContext): Hook {
   if (site.kind === "social") {
     return {
       key: "social-as-site",
-      short: `Vi que o link de site ${a.de} no Google leva direto pro ${site.host?.includes("facebook") ? "Facebook" : "Instagram"}.`,
-      long: `Reparei que o link de site ${a.de} no Google leva direto pra rede social. Funciona, mas quem chega por ali não encontra serviços, horários e um botão pra falar com vocês num lugar só.`,
-      question: `O link de site ${a.de} no Google abre a rede social, né? Vocês já pensaram em ter uma página própria?`,
+      short: `Vi que o link de site ${a.de} leva direto pro ${site.host?.includes("facebook") ? "Facebook" : "Instagram"}.`,
+      long: `Reparei que o link de site ${a.de} leva direto pra rede social. Funciona, mas quem chega por ali não encontra serviços, horários e um botão pra falar com vocês num lugar só.`,
+      question: `O link de site ${a.de} abre a rede social, né? Vocês já pensaram em ter uma página própria?`,
     };
   }
   if (site.kind === "link-in-bio") {
@@ -114,9 +114,9 @@ function pickHook(ctx: OutreachContext): Hook {
   if (site.kind === "none") {
     return {
       key: "no-site",
-      short: `Procurei ${a.o} no Google e não encontrei um site de vocês.`,
+      short: `Procurei um site ${a.de} e não encontrei.`,
       long: `Encontrei ${a.o} pesquisando ${getCategory(ctx.category).plural.toLowerCase()} em ${ctx.city} e não achei um site de vocês. Quem procura pelo Google acaba indo pro concorrente que aparece com página própria.`,
-      question: `Procurei ${a.o} no Google e não achei site. Vocês têm um?`,
+      question: `Procurei um site ${a.de} e não achei. Vocês têm um?`,
     };
   }
   return {

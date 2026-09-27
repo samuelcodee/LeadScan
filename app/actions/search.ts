@@ -26,7 +26,7 @@ export const startSearch = action({ name: "startSearch", schema: searchRequestSc
 });
 
 export const getSearchStatus = action(
-  { name: "getSearchStatus", schema: z.object({ id: idSchema }), limit: "mutation" },
+  { name: "getSearchStatus", schema: z.object({ id: idSchema }), limit: "searchStatus" },
   async ({ id }, user) => {
     const s = await db.search.findFirst({
       where: { id, userId: user.id },

@@ -14,9 +14,11 @@ import { logger } from "@/lib/logger";
  *    cliente consulta o progresso.
  * Para escalar mais, troque este módulo por Inngest / QStash mantendo enqueueSearch() como porta.
  */
-type QueueState = { pending: string[]; running: Promise<void> | null; active: string | null };
-const g = globalThis as unknown as { __leadsiteQueue?: QueueState };
-const state: QueueState = (g.__leadsiteQueue ??= { pending: [], running: null, active: null });
+type QueueState = { pending: string[]; workers: Set<Promise<void>>; active: Set<string> };
+const g = globalThis as unknown as { __leadsiteQueue2?: QueueState };
+const state: QueueState = (g.__leadsiteQueue2 ??= { pending: [], workers: new Set(), active: new Set() });
+/** Buscas simultâneas por instância: a busca de uma pessoa não espera a de outra terminar. */
+const MAX_JOBS = 4;
 
 const STALE_MS = 2 * 60_000;
 
@@ -29,34 +31,37 @@ function keepAlive(p: Promise<void>) {
 }
 
 export function enqueueSearch(id: string) {
-  if (state.active === id || state.pending.includes(id)) return;
+  if (state.active.has(id) || state.pending.includes(id)) return;
   state.pending.push(id);
-  state.running ??= drain();
-  keepAlive(state.running);
+  if (state.workers.size < MAX_JOBS) {
+    const worker = drain().finally(() => state.workers.delete(worker));
+    state.workers.add(worker);
+    keepAlive(worker);
+  } else {
+    // todos os trabalhadores ocupados: a busca entra no próximo que liberar (e segura a função viva até lá)
+    keepAlive(Promise.allSettled([...state.workers]).then(() => undefined));
+  }
 }
 
 export function isQueued(id: string) {
-  return state.active === id || state.pending.includes(id);
+  return state.active.has(id) || state.pending.includes(id);
 }
 
 async function drain() {
-  try {
-    while (state.pending.length) {
-      const id = state.pending.shift()!;
-      // Reserva atômica: se outra instância já pegou, pula
-      const { count } = await db.search.updateMany({ where: { id, status: "QUEUED" }, data: { status: "RUNNING" } });
-      if (!count) continue;
-      state.active = id;
-      try {
-        await runSearchJob(id);
-      } catch (err) {
-        logger.error("job de busca falhou", { id, err });
-        await db.search.update({ where: { id }, data: { status: "FAILED", error: "Erro inesperado ao processar a busca." } }).catch(() => {});
-      }
+  while (state.pending.length) {
+    const id = state.pending.shift()!;
+    // Reserva atômica: se outra instância já pegou, pula
+    const { count } = await db.search.updateMany({ where: { id, status: "QUEUED" }, data: { status: "RUNNING" } });
+    if (!count) continue;
+    state.active.add(id);
+    try {
+      await runSearchJob(id);
+    } catch (err) {
+      logger.error("job de busca falhou", { id, err });
+      await db.search.update({ where: { id }, data: { status: "FAILED", error: "Erro inesperado ao processar a busca." } }).catch(() => {});
+    } finally {
+      state.active.delete(id);
     }
-  } finally {
-    state.active = null;
-    state.running = null;
   }
 }
 

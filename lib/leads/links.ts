@@ -3,8 +3,13 @@ import { leadWhatsAppLink } from "@/lib/whatsapp/link";
 import { whatsappAvailability } from "@/lib/whatsapp/phone";
 
 /**
- * Destinos dos ícones de presença (site, Instagram, WhatsApp, Facebook, Google, telefone).
- * Um clique leva direto para o perfil/conversa. Só http(s) — nada de javascript: vindo da fonte.
+ * Destinos dos ícones de presença (site, Instagram, WhatsApp, Facebook, Maps, telefone).
+ * Um clique sempre leva a algum lugar útil:
+ *  - com o dado: abre direto o perfil/site/conversa;
+ *  - sem o dado (Instagram, site): abre a pesquisa no Google pelo nome + cidade — em segundos
+ *    dá para achar o perfil ou confirmar que não tem site (e isso já é argumento de venda);
+ *  - Maps: sempre, pela busca "nome, endereço, cidade" no Google Maps (sem chave de API).
+ * Só http(s) — nada de javascript: vindo da fonte.
  * Leads DEMO: Instagram/site abrem normalmente (só leitura); WhatsApp abre sem destinatário
  * e telefone não vira link (o número fictício pode ser de alguém real).
  */
@@ -16,6 +21,10 @@ export type LinkLead = {
   phone: string | null;
   whatsapp: string | null;
   mapsUrl?: string | null;
+  name?: string;
+  city?: string;
+  state?: string;
+  address?: string | null;
 };
 
 const handle = (v: string) => v.trim().replace(/^@/, "").replace(/\/+$/, "");
@@ -34,18 +43,46 @@ export function facebookUrl(v: string | null | undefined) {
   return /^[\w.-]{1,80}$/.test(h) ? `https://facebook.com/${h}` : null;
 }
 
+const where = (l: LinkLead) => [l.city, l.state].filter(Boolean).join(" - ");
+
+export function googleSearchUrl(q: string) {
+  return `https://www.google.com/search?q=${encodeURIComponent(q)}`;
+}
+
+export function mapsSearchUrl(l: LinkLead) {
+  if (!l.name) return null;
+  const query = [l.name, l.address, where(l)].filter(Boolean).join(", ");
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+}
+
+/** Link de mapa confiável: o da fonte quando é Google Maps; senão, a busca no Google Maps. */
+function mapsHref(l: LinkLead) {
+  const raw = l.mapsUrl?.trim();
+  if (raw && /^https:\/\/(www\.)?(google\.[a-z.]+\/maps|maps\.google\.[a-z.]+|maps\.app\.goo\.gl|goo\.gl\/maps)/i.test(raw)) return raw;
+  return mapsSearchUrl(l) ?? (raw && /^https:\/\//i.test(raw) ? raw : null);
+}
+
 export function leadLinks(l: LinkLead) {
   const site = classifyWebsite(l.website);
   const wa = whatsappAvailability(l);
   const digits = (l.phone ?? "").replace(/\D/g, "");
+  const siteHref = parseUrl(l.website)?.toString() ?? null;
+  const igHref = instagramUrl(l.instagram);
+  const who = l.name ? `${l.name} ${where(l)}`.trim() : null;
   return {
     site: {
-      href: parseUrl(l.website)?.toString() ?? null,
+      href: siteHref ?? (who ? googleSearchUrl(who) : null),
+      /** true = a fonte trouxe o site; false = o clique abre a pesquisa no Google */
+      found: !!siteHref,
       /** "tem site próprio" (o ícone fica aceso); link de bio/rede social abre mas fica apagado */
       own: site.kind === "own" || site.kind === "free-builder",
       label: site.kind === "none" ? "Sem site" : site.kind === "own" ? (site.host ?? "Site") : WEBSITE_KIND_LABEL[site.kind],
     },
-    instagram: { href: instagramUrl(l.instagram), label: l.instagram ? `@${handle(l.instagram)}` : "Sem Instagram" },
+    instagram: {
+      href: igHref ?? (who ? googleSearchUrl(`${who} instagram`) : null),
+      found: !!igHref,
+      label: l.instagram ? `@${handle(l.instagram)}` : "Sem Instagram",
+    },
     facebook: { href: facebookUrl(l.facebook) },
     whatsapp: {
       href: wa === "none" ? null : leadWhatsAppLink(l),
@@ -53,6 +90,6 @@ export function leadLinks(l: LinkLead) {
       state: wa,
     },
     phone: { href: !l.isDemo && digits.length >= 10 ? `tel:+${digits.startsWith("55") ? digits : `55${digits}`}` : null },
-    maps: { href: l.mapsUrl && /^https:\/\//i.test(l.mapsUrl) ? l.mapsUrl : null },
+    maps: { href: mapsHref(l) },
   };
 }

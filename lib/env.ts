@@ -109,7 +109,7 @@ export function env(): Env {
 export const isDemoMode = () => env().AUTH_MODE === "demo";
 
 /** Fonte de empresas padrão. Versão pública nunca usa dados fictícios. */
-export const dataProviderId = () => env().DATA_PROVIDER ?? (isDemoMode() ? "mock" : "osm");
+export const dataProviderId = () => env().DATA_PROVIDER ?? (isDemoMode() ? "mock" : env().MAPS_API_KEY ? "google" : "osm");
 
 /** Pagamentos simulados: ligados por padrão no modo demo, desligados em produção pública. */
 export const mockPaymentsEnabled = () => env().PAYMENTS_MOCK ?? isDemoMode();

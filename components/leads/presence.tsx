@@ -9,6 +9,9 @@ import { WHATSAPP_AVAILABILITY_LABEL, formatPhone, whatsappAvailability } from "
 
 export type PresenceLead = {
   isDemo: boolean;
+  name?: string;
+  city?: string;
+  state?: string;
   provider: string;
   website: string | null;
   instagram: string | null;
@@ -23,6 +26,19 @@ export type PresenceLead = {
 };
 
 const NOT_FOUND = "Não encontrado";
+
+/** "Não encontrado · procurar no Google" — o dado não veio da fonte, mas dá pra achar em 1 clique. */
+function Missing({ href, what }: { href: string | null; what: string }) {
+  if (!href) return <>{NOT_FOUND}</>;
+  return (
+    <>
+      {NOT_FOUND} ·{" "}
+      <a href={href} target="_blank" rel="noopener noreferrer nofollow" className="text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground">
+        procurar {what} no Google
+      </a>
+    </>
+  );
+}
 
 /** O ícone também é link (um clique abre o perfil/conversa); sem destino fica só o desenho. */
 function Row({ icon, label, children, muted, href }: { icon: ReactNode; label: string; children: ReactNode; muted?: boolean; href?: string | null }) {
@@ -63,16 +79,16 @@ function Out({ href, children }: { href: string | null; children: ReactNode }) {
 export function PresenceList({ lead, className }: { lead: PresenceLead; className?: string }) {
   const site = classifyWebsite(lead.website);
   const links = leadLinks(lead);
-  const siteUrl = links.site.href;
+  const siteUrl = links.site.found ? links.site.href : null;
   const wa = whatsappAvailability(lead);
   const waNumber = formatPhone(lead.whatsapp ?? lead.phone);
   const reviewsKnown = lead.reviewCount !== null;
 
   return (
     <div className={cn("divide-y divide-border/70", className)}>
-      <Row icon={<Globe />} label="Site" muted={site.kind === "none"} href={siteUrl}>
+      <Row icon={<Globe />} label="Site" muted={site.kind === "none"} href={links.site.href}>
         {site.kind === "none" ? (
-          NOT_FOUND
+          <Missing href={links.site.href} what="o site" />
         ) : site.kind === "own" ? (
           <>
             <Out href={siteUrl}>
@@ -96,7 +112,7 @@ export function PresenceList({ lead, className }: { lead: PresenceLead; classNam
             @{lead.instagram}
           </Out>
         ) : (
-          NOT_FOUND
+          <Missing href={links.instagram.href} what="o Instagram" />
         )}
       </Row>
       <Row icon={<MessageCircle />} label="WhatsApp" muted={wa === "none"} href={links.whatsapp.href}>
@@ -114,8 +130,8 @@ export function PresenceList({ lead, className }: { lead: PresenceLead; classNam
             {lead.rating !== null ? `★ ${formatRating(lead.rating)} · ` : ""}
             {formatInt(lead.reviewCount!)} avaliações
           </Out>
-        ) : lead.provider === "osm" ? (
-          "Fonte sem avaliações"
+        ) : lead.provider === "osm" && links.maps.href ? (
+          <Out href={links.maps.href}>Ver avaliações no Google Maps</Out>
         ) : (
           NOT_FOUND
         )}
@@ -127,8 +143,8 @@ export function PresenceList({ lead, className }: { lead: PresenceLead; classNam
           </Out>
         </Row>
       )}
-      <Row icon={<MapPin />} label="Endereço" muted={!lead.address}>
-        {lead.address ?? NOT_FOUND}
+      <Row icon={<MapPin />} label="Endereço" muted={!lead.address} href={links.maps.href}>
+        {lead.address ? <Out href={links.maps.href}>{lead.address}</Out> : links.maps.href ? <Out href={links.maps.href}>Ver no Google Maps</Out> : NOT_FOUND}
       </Row>
       <Row icon={<Clock />} label="Horário" muted={lead.openingHours.length === 0}>
         {lead.openingHours.length ? (

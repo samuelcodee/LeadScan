@@ -10,12 +10,16 @@ const store = new Map<string, Bucket>();
 
 export const LIMITS = {
   search: { max: 20, windowMs: 60_000 },
+  /** progresso da busca em lote (a tela pergunta a cada 1,5–4 s) */
+  searchStatus: { max: 90, windowMs: 60_000 },
   ai: { max: 30, windowMs: 60 * 60_000 },
   mutation: { max: 120, windowMs: 60_000 },
   publicView: { max: 60, windowMs: 60_000 },
   /** fotos do Google: uma página de protótipos pode pedir dezenas de uma vez */
   photo: { max: 400, windowMs: 60_000 },
   auth: { max: 12, windowMs: 10 * 60_000 },
+  /** tentativas de senha por conta (contra adivinhação de senha de alguém específico) */
+  password: { max: 8, windowMs: 15 * 60_000 },
   upload: { max: 20, windowMs: 10 * 60_000 },
   payment: { max: 30, windowMs: 10 * 60_000 },
   webhook: { max: 600, windowMs: 60_000 },

@@ -17,6 +17,8 @@ export type ProviderQuery = {
   limit: number;
   /** Pular os N primeiros (só fontes paginadas, ex.: demonstração). */
   offset?: number;
+  /** Posição da tarefa na busca: fontes com vários servidores espalham as consultas paralelas. */
+  hint?: number;
 };
 
 /** Foto real do negócio (hoje: Google Places). `ref` = nome do recurso na API. */
@@ -64,6 +66,10 @@ export interface DataProvider {
   cacheTtlMs: number;
   /** Intervalo mínimo entre chamadas (respeita limites da fonte). */
   minIntervalMs: number;
+  /** Tentativas em fetchWithCache (padrão 3). Fontes que já fazem rodízio de servidor usam 1. */
+  maxAttempts?: number;
+  /** Quantas cidades consultar ao mesmo tempo (padrão 2). */
+  concurrency?: number;
   isConfigured(): boolean;
   search(query: ProviderQuery, signal?: AbortSignal): Promise<ProviderBusiness[]>;
 }

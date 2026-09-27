@@ -2,7 +2,9 @@
 
 import { z } from "zod";
 import { action, publicAction, UserFacingError } from "@/lib/action";
-import { loginWithEmail, loginWithPhone, normalizeEmail, normalizeMobile, isReservedUsername, USERNAME_RE } from "@/lib/auth/accounts";
+import { loginWithEmail, loginWithPhone, normalizeEmail, normalizeMobile, isReservedUsername, parseIdentifier, signInWithPassword, signUpWithPassword, USERNAME_RE } from "@/lib/auth/accounts";
+import { PASSWORD_MAX } from "@/lib/auth/password";
+import { assertRateLimit } from "@/lib/rate-limit";
 import { consumeCode, issueCode } from "@/lib/auth/otp";
 import { clearSessionCookie, safeNext, setSessionCookie } from "@/lib/auth/session";
 import { db } from "@/lib/db";
@@ -49,6 +51,37 @@ export const verifyLoginCode = publicAction(
     const target = normalizeTarget(channel, raw);
     await consumeCode(channel, target, code);
     const user = channel === "EMAIL" ? await loginWithEmail(target) : await loginWithPhone(target);
+    await setSessionCookie(user);
+    const dest = safeNext(next);
+    return { redirect: user.onboardedAt ? dest : `/onboarding?next=${encodeURIComponent(dest)}` };
+  },
+);
+
+/** Criar conta com e-mail ou celular + senha (funciona sem provedor de código). */
+export const signUpPassword = publicAction(
+  {
+    schema: z.object({ identifier: z.string().trim().min(5).max(160), password: z.string().max(PASSWORD_MAX), next: z.string().max(300).optional() }),
+    limit: "auth",
+    name: "signUpPassword",
+  },
+  async ({ identifier, password, next }) => {
+    const user = await signUpWithPassword(identifier, password);
+    await setSessionCookie(user);
+    return { redirect: `/onboarding?next=${encodeURIComponent(safeNext(next))}` };
+  },
+);
+
+/** Entrar com e-mail ou celular + senha. */
+export const signInPassword = publicAction(
+  {
+    schema: z.object({ identifier: z.string().trim().min(5).max(160), password: z.string().min(1, "Digite a senha.").max(PASSWORD_MAX), next: z.string().max(300).optional() }),
+    limit: "auth",
+    name: "signInPassword",
+  },
+  async ({ identifier, password, next }) => {
+    const id = parseIdentifier(identifier);
+    if (id) assertRateLimit("password", `${id.kind}:${id.value}`);
+    const user = await signInWithPassword(identifier, password);
     await setSessionCookie(user);
     const dest = safeNext(next);
     return { redirect: user.onboardedAt ? dest : `/onboarding?next=${encodeURIComponent(dest)}` };

@@ -48,7 +48,7 @@ export function LeadsTable({ leads }: { leads: LeadListItem[] }) {
                 </span>
               </td>
               <td className="md:px-2 md:py-2">
-                <PresenceIcons lead={{ isDemo: l.isDemo, website: l.website, instagram: l.instagram, phone: l.phone, whatsapp: l.whatsapp }} className="-ml-1.5" />
+                <PresenceIcons lead={{ isDemo: l.isDemo, website: l.website, instagram: l.instagram, phone: l.phone, whatsapp: l.whatsapp, mapsUrl: l.mapsUrl, name: l.name, city: l.city, state: l.state, address: l.address }} className="-ml-2" />
               </td>
               <td className="hidden whitespace-nowrap text-xs text-muted-foreground md:table-cell md:px-3 md:py-3">
                 {l.lastContactAt ? formatRelative(l.lastContactAt) : "—"}

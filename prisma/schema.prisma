@@ -148,6 +148,8 @@ model User {
   /// E.164 sem + (ex.: 5585999998888)
   phone           String?   @unique
   phoneVerifiedAt DateTime?
+  /// Senha (scrypt) para entrar com e-mail ou celular sem provedor de código. Nulo = conta só por Google/código.
+  passwordHash    String?
   googleId        String?   @unique
   name            String
   agencyName      String?

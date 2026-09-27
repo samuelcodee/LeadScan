@@ -14,15 +14,18 @@ const lastCallAt = new Map<string, number>();
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Respeita o intervalo mínimo entre chamadas de cada fonte (nada de rajadas). */
+/** Espaça as chamadas à mesma fonte. Reserva o horário antes de esperar: chamadas em paralelo não saem juntas. */
 async function throttle(p: DataProvider) {
-  const wait = (lastCallAt.get(p.id) ?? 0) + p.minIntervalMs - Date.now();
-  if (wait > 0) await sleep(wait);
-  lastCallAt.set(p.id, Date.now());
+  const now = Date.now();
+  const slot = Math.max(now, (lastCallAt.get(p.id) ?? 0) + p.minIntervalMs);
+  lastCallAt.set(p.id, slot);
+  if (slot > now) await sleep(slot - now);
 }
 
 /** Busca na fonte com cache no banco: a mesma consulta não é paga duas vezes. */
 export async function fetchWithCache(p: DataProvider, q: ProviderQuery): Promise<ProviderBusiness[]> {
   if (p.cacheTtlMs === 0) return p.search(q);
+  // hint não entra na chave: é só a ordem dos servidores, o resultado é o mesmo
   const key = hashKey("provider", p.id, q.category, q.city.toLowerCase(), q.uf, q.limit, q.offset ?? 0);
   const hit = await db.providerCache.findUnique({ where: { key } });
   if (hit && hit.expiresAt > new Date()) {
@@ -30,7 +33,8 @@ export async function fetchWithCache(p: DataProvider, q: ProviderQuery): Promise
     return hit.payload as unknown as ProviderBusiness[];
   }
   let lastError: unknown;
-  for (let attempt = 0; attempt < 3; attempt++) {
+  const attempts = p.maxAttempts ?? 3;
+  for (let attempt = 0; attempt < attempts; attempt++) {
     try {
       await throttle(p);
       const items = await p.search(q);
@@ -42,7 +46,7 @@ export async function fetchWithCache(p: DataProvider, q: ProviderQuery): Promise
       return items;
     } catch (err) {
       lastError = err;
-      if (!(err instanceof ProviderError && err.retryable)) break;
+      if (!(err instanceof ProviderError && err.retryable) || attempt === attempts - 1) break;
       await sleep(1500 * 2 ** attempt); // backoff exponencial
     }
   }
@@ -91,7 +95,15 @@ export async function createSearch(userId: string, req: SearchRequest) {
  * qualquer busca anterior ou fonte) é pulado e a fonte é consultada além disso
  * (paginação na demonstração, lote maior nas fontes reais) para completar a quantidade.
  */
+/**
+ * Tempo máximo de uma rodada do job. A função na Vercel morre em 300 s (maxDuration da página
+ * de busca): paramos antes, gravamos o que achou e a busca termina com o que tem — nunca fica
+ * presa em "Buscando…".
+ */
+const JOB_BUDGET_MS = 230_000;
+
 export async function runSearchJob(searchId: string) {
+  const startedAt = Date.now();
   const search = await db.search.findUnique({ where: { id: searchId } });
   if (!search || search.status === "DONE") return;
   const req = { cities: [], ...(search.params as object) } as unknown as SearchRequest & { provider: DataProvider["id"] };
@@ -99,28 +111,33 @@ export async function runSearchJob(searchId: string) {
   const regional = req.cities.length === 0;
   const tasks = planTasks(req, provider, search.id);
   const { spread } = regionBudget(provider);
+  const concurrency = Math.max(1, provider.concurrency ?? 2);
 
-  await db.search.update({ where: { id: searchId }, data: { status: "RUNNING", total: tasks.length, progress: 0 } });
-  await backfillDedupeKeys(search.userId);
-  const collected: { id: string; score: number }[] = [];
+  // Retomada: a instância anterior pode ter morrido no meio — segue de onde parou, com o que já achou
+  const resumeAt = Math.min(search.progress, tasks.length);
+  const previous = search.leadIds.length
+    ? await db.lead.findMany({ where: { id: { in: search.leadIds }, userId: search.userId }, select: { id: true, score: true } })
+    : [];
+  await db.search.update({ where: { id: searchId }, data: { status: "RUNNING", total: tasks.length, progress: resumeAt } });
+  if (resumeAt === 0) await backfillDedupeKeys(search.userId);
+  const collected: { id: string; score: number }[] = [...previous];
   const errors: string[] = [];
   const seen = new Set<string>();
   let skipped = 0;
+  let done = resumeAt;
+  let stoppedEarly = false;
+  let failures = 0;
 
-  for (const [i, t] of tasks.entries()) {
-    const missing = req.limit - collected.length;
-    if (missing <= 0) break;
-    // Busca geral espalha pelas cidades; cidades escolhidas dividem a quantidade (a sobra passa adiante)
-    const quota = regional
-      ? Math.min(missing, Math.max(2, Math.ceil(req.limit / (spread * req.categories.length))))
-      : Math.ceil(missing / (tasks.length - i));
+  const top = () => [...new Map(collected.map((c) => [c.id, c])).values()].sort((a, b) => b.score - a.score).slice(0, req.limit);
+
+  const runTask = async (t: Task, index: number, quota: number) => {
     try {
       const known = await db.lead.count({ where: { userId: search.userId, provider: provider.id, category: t.category, city: t.city.name, state: t.city.uf } });
       const fresh: ProviderBusiness[] = [];
       // Demonstração: páginas seguintes da mesma cidade; reais: um lote que cobre o que já foi visto
       for (let attempt = 0, offset = known; attempt < (provider.isDemo ? 6 : 1) && fresh.length < quota; attempt++) {
         const pool = provider.isDemo ? quota * 2 : provider.id === "osm" ? provider.capabilities.maxResults : Math.min(provider.capabilities.maxResults, known + quota + 10);
-        const raw = await fetchWithCache(provider, { category: t.category, city: t.city.name, uf: t.city.uf, limit: pool, ...(provider.isDemo ? { offset } : {}) });
+        const raw = await fetchWithCache(provider, { category: t.category, city: t.city.name, uf: t.city.uf, limit: pool, hint: index, ...(provider.isDemo ? { offset } : {}) });
         offset += pool;
         const allowed = await filterSuppressed(raw);
         const r = await excludeKnown(search.userId, allowed, { usePhone: !provider.isDemo, uniqueNames: provider.isDemo, seen });
@@ -131,18 +148,50 @@ export async function runSearchJob(searchId: string) {
       const rows = await upsertLeads({ userId: search.userId, provider: provider.id, isDemo: provider.isDemo, category: t.category, items: fresh });
       collected.push(...rows);
     } catch (err) {
+      failures++;
       const msg = err instanceof ProviderError ? err.message : "Falha ao consultar a fonte de dados.";
       if (!regional) errors.push(`${getCategory(t.category).plural} em ${t.city.name}: ${msg}`);
       else if (errors.length === 0) errors.push(msg);
-      logger.warn("tarefa de busca falhou", { searchId, task: t, err });
+      logger.warn("tarefa de busca falhou", { searchId, task: t, err: String(err) });
     }
-    await db.search.update({ where: { id: searchId }, data: { progress: i + 1 } });
+  };
+
+  // Várias cidades ao mesmo tempo (cada uma num servidor diferente da fonte); grava a cada rodada
+  for (let i = resumeAt; i < tasks.length; i += concurrency) {
+    const missing = req.limit - top().length;
+    if (missing <= 0) break;
+    if (Date.now() - startedAt > JOB_BUDGET_MS) {
+      stoppedEarly = true;
+      break;
+    }
+    const batch = tasks.slice(i, i + concurrency);
+    const remainingTasks = tasks.length - i;
+    const quotaFor = () =>
+      regional
+        ? Math.min(missing, Math.max(2, Math.ceil(req.limit / (spread * req.categories.length))))
+        : Math.max(1, Math.ceil(missing / remainingTasks));
+    const failuresBefore = failures;
+    await Promise.all(batch.map((t, k) => runTask(t, i + k, quotaFor())));
+    done = i + batch.length;
+    // Primeira rodada inteira falhou e nada foi achado: a fonte está fora — avisa agora em vez de insistir por minutos
+    if (i === resumeAt && failures - failuresBefore === batch.length && top().length === 0) {
+      await db.search.update({ where: { id: searchId }, data: { progress: done } });
+      stoppedEarly = true;
+      break;
+    }
+    const best = top();
+    await db.search.update({ where: { id: searchId }, data: { progress: done, leadIds: best.map((u) => u.id), resultCount: best.length } });
   }
 
   // Ordena por potencial (código, não IA) e corta no limite pedido.
-  const unique = [...new Map(collected.map((c) => [c.id, c])).values()].sort((a, b) => b.score - a.score).slice(0, req.limit);
+  const unique = top();
   const failedAll = unique.length === 0 && errors.length > 0;
   const notes = [...errors.slice(0, 3)];
+  if (stoppedEarly && unique.length === 0 && errors.length) {
+    // a fonte caiu logo de cara: a mensagem do erro já explica (ex.: servidores lentos)
+  } else if (stoppedEarly) {
+    notes.unshift(`A fonte estava lenta: consultamos ${done} de ${tasks.length} cidades${unique.length ? " e mostramos o que achamos" : ""}. Busque de novo para continuar pelas outras.`);
+  }
   if (unique.length < req.limit && skipped > 0) {
     notes.push(
       `${unique.length ? `Achamos ${unique.length} empresas novas` : "Nenhuma empresa nova"}: outras ${skipped} desta busca você já tinha em Meus leads${regional ? "" : ". Tente outra cidade ou a busca geral pelo estado"}.`,

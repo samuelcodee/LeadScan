@@ -16,15 +16,12 @@ export default async function LoginPage(props: PageProps<"/login">) {
   const target = safeNext(next);
   const user = await getCurrentUser();
   if (user) redirect(user.onboardedAt ? target : `/onboarding?next=${encodeURIComponent(target)}`);
-  // O texto fala só das formas de entrar que existem nesta instalação (ex.: só Google = sem "código")
+  // E-mail/celular + senha funcionam sempre; Google e código entram quando configurados
   const google = googleEnabled();
   const channels = loginChannels();
-  const ways = [google && "o Google", channels.email && "seu e-mail", channels.sms && "seu celular"].filter(Boolean) as string[];
-  const waysText = ways.length > 1 ? `${ways.slice(0, -1).join(", ")} ou ${ways.at(-1)}` : (ways[0] ?? "");
-  const withCode = channels.email || channels.sms;
   const intro = signup
-    ? `Use ${waysText}. ${withCode ? "A conta nasce quando você confirma o código, sem senha pra decorar." : "A conta nasce no primeiro acesso, sem senha pra decorar."}`
-    : `Primeira vez? ${withCode ? "A conta é criada quando você confirma o código." : "A conta é criada no primeiro acesso."} Sem senha pra decorar.`;
+    ? `Use ${google ? "o Google ou " : ""}seu e-mail ou celular com uma senha. Leva menos de um minuto.`
+    : `Primeira vez? Toque em “Criar conta”${google ? " ou entre direto com o Google" : ""}.`;
 
   return (
     <main className="grid min-h-dvh grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)]">
@@ -35,13 +32,14 @@ export default async function LoginPage(props: PageProps<"/login">) {
         <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center py-10">
           <h1 className="text-[28px] font-bold tracking-tight">{signup ? "Criar sua conta" : "Entrar ou criar conta"}</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            {ways.length ? intro : "As entradas estão sendo configuradas."}
+            {intro}
           </p>
           <div className="mt-8">
             <LoginForm
               next={target}
               googleEnabled={google}
               channels={channels}
+              signup={signup}
               demoEnabled={isDemoMode()}
               error={typeof erro === "string" ? erro : undefined}
             />

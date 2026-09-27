@@ -1,5 +1,6 @@
 import "server-only";
 import { revalidateTag, unstable_cache } from "next/cache";
+import { isDemoMode } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { closedPodiums, leaderboard, platformDailyRevenue, platformTotals, type Podium, type RankedUser } from "@/lib/ranking/queries";
 import type { Period } from "@/lib/time/periods";
@@ -14,18 +15,20 @@ import type { Period } from "@/lib/time/periods";
  */
 export const COMMUNITY_TAG = "community";
 const REVALIDATE = 60;
+/** O placar muda de regra entre demonstração e versão pública (contas de exemplo entram ou não): entra na chave. */
+const mode = () => (isDemoMode() ? "demo" : "public");
 
 const reviveUser = (u: RankedUser): RankedUser => ({ ...u, lastSaleAt: new Date(u.lastSaleAt) });
 const revivePodium = (p: Podium): Podium => ({ ...p, start: new Date(p.start), winners: p.winners.map(reviveUser) });
 
 export async function cachedLeaderboard(period: Pick<Period, "start" | "end"> | null, limit = 100) {
   const key = period ? [period.start.toISOString(), period.end.toISOString()] : ["all"];
-  const run = unstable_cache(() => leaderboard(period, limit), ["leaderboard", ...key, String(limit)], { tags: [COMMUNITY_TAG], revalidate: REVALIDATE });
+  const run = unstable_cache(() => leaderboard(period, limit), ["leaderboard", mode(), ...key, String(limit)], { tags: [COMMUNITY_TAG], revalidate: REVALIDATE });
   return (await run()).map(reviveUser);
 }
 
 export async function cachedClosedPodiums(unit: "week" | "month", opts: { userId?: string; limitPeriods?: number } = {}) {
-  const run = unstable_cache(() => closedPodiums(unit, opts), ["podiums", unit, opts.userId ?? "-", String(opts.limitPeriods ?? 0)], {
+  const run = unstable_cache(() => closedPodiums(unit, opts), ["podiums", mode(), unit, opts.userId ?? "-", String(opts.limitPeriods ?? 0)], {
     tags: [COMMUNITY_TAG],
     revalidate: REVALIDATE * 5,
   });
@@ -33,14 +36,14 @@ export async function cachedClosedPodiums(unit: "week" | "month", opts: { userId
 }
 
 export async function cachedPlatformTotals() {
-  const run = unstable_cache(platformTotals, ["platform-totals"], { tags: [COMMUNITY_TAG], revalidate: REVALIDATE });
+  const run = unstable_cache(platformTotals, ["platform-totals", mode()], { tags: [COMMUNITY_TAG], revalidate: REVALIDATE });
   const t = await run();
   const revive = (p: Period): Period => ({ ...p, start: new Date(p.start), end: new Date(p.end) });
   return { ...t, week: revive(t.week), month: revive(t.month) };
 }
 
 export async function cachedPlatformDailyRevenue(days = 30) {
-  const run = unstable_cache(() => platformDailyRevenue(days), ["platform-daily", String(days)], { tags: [COMMUNITY_TAG], revalidate: REVALIDATE });
+  const run = unstable_cache(() => platformDailyRevenue(days), ["platform-daily", mode(), String(days)], { tags: [COMMUNITY_TAG], revalidate: REVALIDATE });
   return run();
 }
 

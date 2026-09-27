@@ -30,7 +30,10 @@ export function normalizeBrazilPhone(raw: string | null | undefined): BrazilPhon
 
   const ddd = d.slice(0, 2);
   if (!VALID_DDD.has(Number(ddd))) return null;
-  const local = d.slice(2);
+  let local = d.slice(2);
+  // Celular no formato antigo (8 dígitos, antes do 9º dígito de 2012–2016): muito comum em
+  // cadastros velhos (OpenStreetMap, sites). Hoje todo celular tem o 9 na frente.
+  if (local.length === 8 && /^[6-9]/.test(local)) local = `9${local}`;
   const isMobile = local.length === 9 && local.startsWith("9");
   if (local.length === 9 && !isMobile) return null;
   if (local.length === 8 && !/^[2-5]/.test(local)) return null; // fixo começa com 2–5
@@ -38,7 +41,7 @@ export function normalizeBrazilPhone(raw: string | null | undefined): BrazilPhon
   const national = isMobile
     ? `(${ddd}) ${local.slice(0, 5)}-${local.slice(5)}`
     : `(${ddd}) ${local.slice(0, 4)}-${local.slice(4)}`;
-  return { e164: `55${d}`, ddd, national, isMobile };
+  return { e164: `55${ddd}${local}`, ddd, national, isMobile };
 }
 
 export function formatPhone(e164OrRaw: string | null | undefined) {
@@ -56,6 +59,19 @@ export function whatsappAvailability(lead: { whatsapp?: string | null; phone?: s
   const phone = normalizeBrazilPhone(lead.phone);
   if (!phone) return "none";
   return phone.isMobile ? "likely" : "unknown";
+}
+
+/**
+ * Vários números no mesmo campo ("3232-3232 / 99999-8888", "…; …", "… ou …"):
+ * devolve o melhor — celular antes de fixo. Nulo se nenhum for válido.
+ */
+export function pickPhone(raw: string | null | undefined): BrazilPhone | null {
+  if (!raw) return null;
+  const all = raw
+    .split(/[;,/|]|\bou\b|\be\b/i)
+    .map((p) => normalizeBrazilPhone(p))
+    .filter((p): p is BrazilPhone => !!p);
+  return all.find((p) => p.isMobile) ?? all[0] ?? normalizeBrazilPhone(raw);
 }
 
 /** Melhor número para abrir conversa (WhatsApp declarado > celular > fixo). */
