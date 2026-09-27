@@ -98,7 +98,7 @@ ${area}
 (
 ${parts}
 );
-out center tags ${Math.min(q.limit, 500)};`;
+out center tags ${Math.min(q.limit, 1000)};`;
 }
 
 function translateHours(raw?: string) {
@@ -188,7 +188,8 @@ export const osmProvider: DataProvider = {
     reviews: false,
     instagram: true,
     whatsapp: true,
-    maxResults: 500,
+    // a cidade inteira numa consulta: a varredura segue por ela até a última empresa
+    maxResults: 1000,
   },
   cacheTtlMs: 7 * 24 * 60 * 60 * 1000,
   minIntervalMs: 400,

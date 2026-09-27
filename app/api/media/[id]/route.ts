@@ -9,8 +9,8 @@ export async function GET(_req: Request, ctx: RouteContext<"/api/media/[id]">) {
   const { id } = await ctx.params;
   if (!/^[a-z0-9]{20,40}$/i.test(id)) return new Response("Não encontrado", { status: 404 });
   const media = await db.media.findUnique({ where: { id }, select: { data: true, mime: true, moderation: true, kind: true } });
-  // Mídia de conversa privada nunca sai por aqui (tem rota própria com checagem de membro)
-  if (!media || media.moderation === "REJECTED" || media.kind.startsWith("CHAT_")) return new Response("Não encontrado", { status: 404 });
+  // Mídia de conversa privada e vídeo/áudio de Arquivos nunca saem por aqui (rotas próprias com checagem de quem pede)
+  if (!media || media.moderation === "REJECTED" || media.kind.startsWith("CHAT_") || media.kind.startsWith("FILE_")) return new Response("Não encontrado", { status: 404 });
   return new Response(Buffer.from(media.data), {
     headers: {
       "Content-Type": media.mime,

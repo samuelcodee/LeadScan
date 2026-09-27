@@ -6,6 +6,7 @@ import { getAiProvider } from "@/lib/ai/catalog";
 import { listConnections } from "@/lib/ai/connections";
 import { requireUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { recentPhotoUrls } from "@/lib/media/files";
 import { appUrl, leadPhotos, parseSpec, proposalUrl } from "@/lib/prototypes/service";
 
 export const metadata: Metadata = { title: "Estúdio" };
@@ -37,7 +38,8 @@ export default async function PrototypePage(props: PageProps<"/prototypes/[id]">
       key={proto.id}
       prototype={{ id: proto.id, name: proto.name, spec: parseSpec(proto.spec) }}
       lead={{ id: proto.lead.id, name: proto.lead.name, isDemo: proto.lead.isDemo, phone: proto.lead.phone, whatsapp: proto.lead.whatsapp }}
-      leadPhotos={leadPhotos(proto.lead).photos}
+      // fotos do negócio primeiro, depois as enviadas em Arquivos
+      leadPhotos={[...leadPhotos(proto.lead).photos, ...(await recentPhotoUrls(user.id))]}
       versions={versions}
       initialShareUrl={proto.shareEnabled && proto.shareSlug ? await proposalUrl(proto.shareSlug) : null}
       aiEnabled={await isAIEnabled(user.id)}

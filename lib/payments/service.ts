@@ -11,7 +11,9 @@ import { logEvent } from "@/lib/leads/events";
 import { logger } from "@/lib/logger";
 import { mercadoPagoConfigured, mpCreateCheckout, mpRefresh } from "@/lib/payments/mercadopago";
 import { stripeConfigured, stripeCreateCheckout } from "@/lib/payments/stripe";
-import type { AccountSecrets, CheckoutUrls, PayMethod, PaymentProviderId, PaymentUpdate, ProviderInfo } from "@/lib/payments/types";
+import { pixAccountFor } from "@/lib/finance/banks";
+import { buildPixCode } from "@/lib/payments/pix";
+import type { AccountSecrets, ChargeProvider, CheckoutUrls, PayMethod, PaymentProviderId, PaymentUpdate, ProviderInfo } from "@/lib/payments/types";
 import { appUrl } from "@/lib/prototypes/service";
 import { publish } from "@/lib/realtime";
 
@@ -116,7 +118,8 @@ async function checkoutUrls(slug: string): Promise<CheckoutUrls> {
 
 /** Gera (ou renova) a URL do checkout hospedado do provedor para uma cobrança. */
 export async function ensureCheckout(charge: Charge & { account: PaymentAccount | null }) {
-  if (charge.status !== "PENDING") return charge;
+  // Pix direto não tem checkout: o código fica na própria página de pagamento
+  if (charge.status !== "PENDING" || charge.provider === "pix") return charge;
   const fresh = charge.checkoutUrl && (!charge.expiresAt || charge.expiresAt.getTime() - Date.now() > 10 * 60 * 1000);
   if (fresh) return charge;
 
@@ -147,17 +150,18 @@ export async function ensureCheckout(charge: Charge & { account: PaymentAccount 
   });
 }
 
-export async function createCharge(
-  userId: string,
-  input: { provider: PaymentProviderId; amountCents: number; description: string; methods: PayMethod[]; leadId?: string | null; prototypeId?: string | null },
-) {
-  if (input.provider === "mock" && !mockPaymentsEnabled()) throw new UserFacingError("Pagamentos de teste estão desligados nesta instalação.");
-  const account =
-    input.provider === "mock"
-      ? await saveAccount(userId, "mock", { status: "ACTIVE", externalId: `mock_${userId}` })
-      : await db.paymentAccount.findUnique({ where: { userId_provider: { userId, provider: input.provider } } });
-  if (!account || account.status !== "ACTIVE") throw new UserFacingError("Conecte sua conta de recebimento antes de criar a cobrança.");
+type ChargeInput = {
+  provider: ChargeProvider;
+  amountCents: number;
+  description: string;
+  methods: PayMethod[];
+  leadId?: string | null;
+  prototypeId?: string | null;
+  /** Pix direto: qual conta (padrão: a principal com chave Pix) */
+  bankAccountId?: string | null;
+};
 
+async function assertOwnLinks(userId: string, input: ChargeInput) {
   if (input.leadId) {
     const lead = await db.lead.findFirst({ where: { id: input.leadId, userId }, select: { id: true } });
     if (!lead) throw new UserFacingError("Lead não encontrado.");
@@ -166,6 +170,62 @@ export async function createCharge(
     const proto = await db.prototype.findFirst({ where: { id: input.prototypeId, userId }, select: { id: true } });
     if (!proto) throw new UserFacingError("Protótipo não encontrado.");
   }
+}
+
+/**
+ * Pix direto: o código "copia e cola" sai da chave Pix do próprio usuário, com o valor já
+ * preenchido. Sem provedor e sem taxa. Como o Pix estático não avisa quando é pago, quem
+ * cobra marca como recebido (confirmPixCharge).
+ */
+async function createPixCharge(userId: string, input: ChargeInput) {
+  const acc = await pixAccountFor(userId, input.bankAccountId);
+  if (!acc) throw new UserFacingError("Cadastre uma conta com chave Pix em Financeiro → Contas bancárias.");
+  await assertOwnLinks(userId, input);
+  const slug = randomSlug(14);
+  const charge = await db.charge.create({
+    data: {
+      userId,
+      leadId: input.leadId ?? null,
+      prototypeId: input.prototypeId ?? null,
+      bankAccountId: acc.id,
+      provider: "pix",
+      slug,
+      description: input.description,
+      amountCents: input.amountCents,
+      methods: ["pix"],
+      pixCode: buildPixCode({ key: acc.key, name: acc.holderName, city: acc.city, amountCents: input.amountCents, txid: slug, description: input.description }),
+      checkoutUrl: `${await appUrl()}/pagar/${slug}`,
+      isTest: false,
+    },
+    include: { account: true },
+  });
+  if (charge.leadId) await logEvent(userId, charge.leadId, "PAYMENT_LINK_CREATED", { chargeId: charge.id, amountCents: charge.amountCents, provider: "pix" });
+  await publish({ type: "charge", userId, chargeId: charge.id, status: "PENDING" });
+  return charge;
+}
+
+/** Quem cobrou confirma que o Pix caiu na conta. Vira venda registrada à mão (sem ranking/nível). */
+export async function confirmPixCharge(userId: string, chargeId: string, paidAt?: Date) {
+  const charge = await db.charge.findFirst({ where: { id: chargeId, userId }, select: { id: true, provider: true, status: true } });
+  if (!charge) throw new UserFacingError("Cobrança não encontrada.");
+  if (charge.provider !== "pix") throw new UserFacingError("Só cobranças por Pix direto são confirmadas à mão. As outras o provedor confirma sozinho.");
+  if (charge.status !== "PENDING") throw new UserFacingError("Essa cobrança não está mais em aberto.");
+  return applyPaymentUpdate(
+    { chargeId: charge.id, externalPaymentId: null, status: "PAID", method: "pix", amountCents: null, feeCents: 0, netCents: null, paidAt: paidAt ?? new Date(), isTest: false },
+    { chargeId: charge.id },
+  );
+}
+
+export async function createCharge(userId: string, input: ChargeInput) {
+  if (input.provider === "pix") return createPixCharge(userId, input);
+  const provider: PaymentProviderId = input.provider;
+  if (provider === "mock" && !mockPaymentsEnabled()) throw new UserFacingError("Pagamentos de teste estão desligados nesta instalação.");
+  const account =
+    provider === "mock"
+      ? await saveAccount(userId, "mock", { status: "ACTIVE", externalId: `mock_${userId}` })
+      : await db.paymentAccount.findUnique({ where: { userId_provider: { userId, provider } } });
+  if (!account || account.status !== "ACTIVE") throw new UserFacingError("Conecte sua conta de recebimento antes de criar a cobrança.");
+  await assertOwnLinks(userId, input);
 
   const charge = await db.charge.create({
     data: {
@@ -216,7 +276,10 @@ export async function applyPaymentUpdate(update: PaymentUpdate, where: { chargeI
       return { applied: false, reason: "valor divergente" };
     }
     const paidAt = update.paidAt ?? new Date();
-    const points = pointsForSale(charge.amountCents, env().RANKING_MIN_SALE_CENTS);
+    // Pix direto: quem confirma é o próprio vendedor (nenhum provedor viu o dinheiro) → venda
+    // registrada à mão: entra no financeiro, mas não vale ponto, ranking nem nível
+    const selfDeclared = charge.provider === "pix";
+    const points = selfDeclared ? 0 : pointsForSale(charge.amountCents, env().RANKING_MIN_SALE_CENTS);
     const sale = await db.$transaction(async (tx) => {
       // Update condicional: só um processo consegue passar a cobrança para PAID
       const moved = await tx.charge.updateMany({
@@ -237,8 +300,8 @@ export async function applyPaymentUpdate(update: PaymentUpdate, where: { chargeI
           userId: charge.userId,
           leadId: charge.leadId,
           chargeId: charge.id,
-          source: "PLATFORM",
-          verified: true,
+          source: selfDeclared ? "MANUAL" : "PLATFORM",
+          verified: !selfDeclared,
           isTest: charge.isTest || update.isTest,
           amountCents: charge.amountCents,
           method: update.method,
@@ -259,6 +322,11 @@ export async function applyPaymentUpdate(update: PaymentUpdate, where: { chargeI
       return created;
     });
     if (!sale) return { applied: false, reason: "concorrência" };
+    if (selfDeclared) {
+      await publish({ type: "sale", userId: charge.userId, amountCents: sale.amountCents, points: 0, verified: false });
+      await publish({ type: "charge", userId: charge.userId, chargeId: charge.id, status: "PAID" });
+      return { applied: true, sale };
+    }
     const { level, gained } = await recomputeLevel(charge.userId);
     await publish({ type: "sale", userId: charge.userId, amountCents: sale.amountCents, points: sale.points, verified: true });
     await publish({ type: "charge", userId: charge.userId, chargeId: charge.id, status: "PAID" });

@@ -1,9 +1,9 @@
 "use client";
 
-import { Ban, Copy, ExternalLink, MoreHorizontal } from "lucide-react";
+import { Ban, CheckCircle2, Copy, ExternalLink, MoreHorizontal } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { cancelChargeAction } from "@/app/actions/finance";
+import { cancelChargeAction, confirmPixChargeAction } from "@/app/actions/finance";
 import { DemoBadge } from "@/components/common/page-header";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -23,6 +23,7 @@ export type ChargeRow = {
   paidAt: Date | null;
   createdAt: Date;
   lead: { id: string; name: string; isDemo: boolean } | null;
+  bankAccount?: { bankName: string } | null;
 };
 
 const STATUS: Record<string, { label: string; className: string }> = {
@@ -35,7 +36,13 @@ const STATUS: Record<string, { label: string; className: string }> = {
 };
 
 const METHOD: Record<string, string> = { pix: "Pix", credit_card: "Crédito", debit_card: "Débito", other: "Outro" };
-const PROVIDER: Record<string, string> = { mock: "Teste", mercadopago: "Mercado Pago", stripe: "Stripe" };
+const PROVIDER: Record<string, string> = { mock: "Teste", mercadopago: "Mercado Pago", stripe: "Stripe", pix: "Pix direto" };
+
+async function confirmPix(c: ChargeRow) {
+  const r = await confirmPixChargeAction({ id: c.id });
+  if (r.ok) toast.success("Recebimento confirmado. A venda entrou no seu financeiro.");
+  else toast.error(r.error);
+}
 
 export function ChargesTable({ rows, baseUrl }: { rows: ChargeRow[]; baseUrl: string }) {
   if (!rows.length) return <p className="py-6 text-center text-sm text-muted-foreground">Nenhuma cobrança ainda. Crie a primeira pelo botão “Cobrar”.</p>;
@@ -73,7 +80,13 @@ export function ChargesTable({ rows, baseUrl }: { rows: ChargeRow[]; baseUrl: st
                   </div>
                   <p className="truncate text-xs text-muted-foreground">
                     {c.description} · {PROVIDER[c.provider] ?? c.provider}
+                    {c.provider === "pix" && c.bankAccount ? ` (${c.bankAccount.bankName})` : ""}
                   </p>
+                  {c.provider === "pix" && c.status === "PENDING" && (
+                    <button type="button" onClick={() => void confirmPix(c)} className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-foreground underline underline-offset-2">
+                      <CheckCircle2 className="size-3.5" /> Já caiu na conta? Marcar como recebido
+                    </button>
+                  )}
                 </td>
                 <td className="px-3 py-2.5">
                   <span className={cn("inline-flex h-6 items-center rounded-full px-2.5 text-xs font-medium", st.className)}>{st.label}</span>
@@ -100,6 +113,11 @@ export function ChargesTable({ rows, baseUrl }: { rows: ChargeRow[]; baseUrl: st
                           <ExternalLink /> Abrir página de pagamento
                         </a>
                       </DropdownMenuItem>
+                      {c.provider === "pix" && c.status === "PENDING" && (
+                        <DropdownMenuItem onSelect={() => void confirmPix(c)}>
+                          <CheckCircle2 /> Marcar como recebido
+                        </DropdownMenuItem>
+                      )}
                       {c.status === "PENDING" && (
                         <DropdownMenuItem
                           variant="destructive"

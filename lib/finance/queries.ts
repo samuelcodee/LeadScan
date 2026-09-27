@@ -101,6 +101,7 @@ export async function listCharges(userId: string, take = 30) {
       amountCents: true,
       status: true,
       provider: true,
+      bankAccount: { select: { bankName: true } },
       paidMethod: true,
       feeCents: true,
       netCents: true,
@@ -112,9 +113,10 @@ export async function listCharges(userId: string, take = 30) {
   });
 }
 
+/** Vendas registradas à mão (as de Pix direto aparecem em Cobranças, não aqui). */
 export async function listManualSales(userId: string, take = 10) {
   return db.sale.findMany({
-    where: { userId, source: "MANUAL", refundedAt: null },
+    where: { userId, source: "MANUAL", refundedAt: null, chargeId: null },
     orderBy: { closedAt: "desc" },
     take,
     select: { id: true, amountCents: true, note: true, closedAt: true, lead: { select: { id: true, name: true } } },
@@ -129,4 +131,78 @@ export async function chargeableLeads(userId: string) {
     take: 200,
     select: { id: true, name: true, city: true, status: true, dealValue: true, isDemo: true, prototypes: { select: { id: true }, orderBy: { updatedAt: "desc" }, take: 1 } },
   });
+}
+
+export type Movement = {
+  id: string;
+  at: Date;
+  kind: "in" | "fee" | "refund" | "manual";
+  description: string;
+  /** Onde o dinheiro entrou/saiu: Mercado Pago, Stripe, banco do Pix direto, "Por fora" */
+  where: string;
+  method: string | null;
+  cents: number;
+  isTest: boolean;
+};
+
+/**
+ * Extrato: tudo que entrou e saiu, do mais novo para o mais antigo. Entradas pagas pela
+ * plataforma (com a tarifa do provedor em linha separada), estornos e vendas por fora.
+ * O saldo em si fica no provedor ou no banco — aqui é o registro do que passou pelo LeadScan.
+ */
+export async function movements(userId: string, take = 60) {
+  const [charges, manual] = await Promise.all([
+    db.charge.findMany({
+      where: { userId, status: { in: ["PAID", "REFUNDED"] } },
+      orderBy: { paidAt: "desc" },
+      take,
+      select: {
+        id: true,
+        description: true,
+        amountCents: true,
+        feeCents: true,
+        status: true,
+        provider: true,
+        paidMethod: true,
+        paidAt: true,
+        updatedAt: true,
+        isTest: true,
+        bankAccount: { select: { bankName: true } },
+        lead: { select: { name: true } },
+      },
+    }),
+    db.sale.findMany({
+      where: { userId, source: "MANUAL", chargeId: null },
+      orderBy: { closedAt: "desc" },
+      take,
+      select: { id: true, amountCents: true, note: true, closedAt: true, refundedAt: true, lead: { select: { name: true } } },
+    }),
+  ]);
+  const PROVIDER: Record<string, string> = { mercadopago: "Mercado Pago", stripe: "Stripe", mock: "Teste" };
+  const out: Movement[] = [];
+  for (const c of charges) {
+    const where = c.provider === "pix" ? `Pix · ${c.bankAccount?.bankName ?? "sua conta"}` : (PROVIDER[c.provider] ?? c.provider);
+    const label = c.lead ? `${c.lead.name} · ${c.description}` : c.description;
+    const at = c.paidAt ?? c.updatedAt;
+    out.push({ id: `${c.id}:in`, at, kind: "in", description: label, where, method: c.paidMethod, cents: c.amountCents, isTest: c.isTest });
+    if (c.feeCents) out.push({ id: `${c.id}:fee`, at, kind: "fee", description: `Tarifa · ${label}`, where, method: null, cents: -c.feeCents, isTest: c.isTest });
+    if (c.status === "REFUNDED") out.push({ id: `${c.id}:refund`, at: c.updatedAt, kind: "refund", description: `Estorno · ${label}`, where, method: c.paidMethod, cents: -c.amountCents, isTest: c.isTest });
+  }
+  for (const m of manual) {
+    if (m.refundedAt) continue;
+    out.push({ id: m.id, at: m.closedAt, kind: "manual", description: m.lead?.name ?? m.note ?? "Venda por fora", where: "Por fora", method: null, cents: m.amountCents, isTest: false });
+  }
+  out.sort((a, b) => b.at.getTime() - a.at.getTime());
+  const rows = out.slice(0, take);
+  // Totais do que está na lista (testes não somam)
+  const real = rows.filter((m) => !m.isTest);
+  return {
+    rows,
+    totals: {
+      in: real.filter((m) => m.kind === "in" || m.kind === "manual").reduce((s, m) => s + m.cents, 0),
+      fees: real.filter((m) => m.kind === "fee").reduce((s, m) => s - m.cents, 0),
+      refunds: real.filter((m) => m.kind === "refund").reduce((s, m) => s - m.cents, 0),
+      net: real.reduce((s, m) => s + m.cents, 0),
+    },
+  };
 }

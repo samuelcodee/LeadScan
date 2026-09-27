@@ -72,7 +72,19 @@ export interface DataProvider {
   concurrency?: number;
   isConfigured(): boolean;
   search(query: ProviderQuery, signal?: AbortSignal): Promise<ProviderBusiness[]>;
+  /**
+   * Opcional: varre a cidade em pedaços (fontes que limitam quantos resultados cada consulta
+   * devolve). `cursor` null = começo; a busca guarda o `next` em SearchSweep e a próxima
+   * continua dali. Sem este método, a cidade inteira vem de search() de uma vez.
+   */
+  sweep?(query: ProviderQuery, cursor: unknown, signal?: AbortSignal): Promise<SweepPage>;
 }
+
+export type SweepPage = {
+  items: ProviderBusiness[];
+  /** Cursor do próximo pedaço; null = a fonte não tem mais nada nesta cidade. */
+  next: unknown;
+};
 
 export class ProviderError extends Error {
   constructor(

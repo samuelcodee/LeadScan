@@ -2,7 +2,7 @@ import { UserFacingError } from "@/lib/action";
 import { assertMember, sendMessage } from "@/lib/chat/service";
 import { withChatUser } from "@/lib/chat/http";
 import { db } from "@/lib/db";
-import { MAX_UPLOAD_BYTES, MAX_VIDEO_BYTES, saveChatAv, saveImage } from "@/lib/media/store";
+import { finishParts, MAX_UPLOAD_BYTES, MAX_VIDEO_BYTES, saveChatAv, saveImage } from "@/lib/media/store";
 
 /**
  * Foto, áudio ou vídeo no chat (multipart):
@@ -24,11 +24,7 @@ export async function POST(request: Request, ctx: RouteContext<"/api/chat/[id]/m
     if (!uploadId && (!(file instanceof File) || file.size === 0)) throw new UserFacingError("Escolha um arquivo.");
     const buf = uploadId ? Buffer.alloc(0) : Buffer.from(await (file as File).arrayBuffer());
     // Fecha o envio em partes: vira mídia normal (só então pode ser servida)
-    const finish = async (mediaKind: "CHAT_AUDIO" | "CHAT_VIDEO") => {
-      const { count } = await db.media.updateMany({ where: { id: uploadId!, userId: user.id, source: "partial", kind: mediaKind }, data: { source: "upload" } });
-      if (!count) throw new UserFacingError("Envio expirado. Tente de novo.");
-      return { id: uploadId! };
-    };
+    const finish = (mediaKind: "CHAT_AUDIO" | "CHAT_VIDEO") => finishParts(user.id, uploadId!, mediaKind);
     const caption = typeof form.get("body") === "string" ? String(form.get("body")).slice(0, 1000) : null;
     const durationMs = Math.max(0, Math.min(15 * 60_000, Number(form.get("durationMs") ?? 0))) || null;
 

@@ -4,7 +4,7 @@ import { ArrowLeft, Ban, Check, Loader2, MoreHorizontal, MoreVertical, Mic, Pape
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { deleteChatMessage, editChatMessage, markConversationRead, sendText, setBlocked } from "@/app/actions/chat";
+import { answerMessageRequest, deleteChatMessage, editChatMessage, markConversationRead, sendText, setBlocked } from "@/app/actions/chat";
 import { AudioPlayer, ChatImage, chatMediaUrl, fmtDuration, readVideo } from "@/components/chat/media";
 import { PresenceLabel } from "@/components/chat/presence-label";
 import { DemoBadge } from "@/components/common/page-header";
@@ -20,7 +20,8 @@ import { cn } from "@/lib/utils";
 
 /* eslint-disable @next/next/no-img-element -- prévia local (blob:) antes do envio */
 
-type Conv = { id: string; peer: ChatPeer; peerLastReadAt: string | null; iBlocked: boolean; blockedMe: boolean };
+type Inbox = "ACCEPTED" | "REQUEST" | "DECLINED";
+type Conv = { id: string; peer: ChatPeer; peerLastReadAt: string | null; iBlocked: boolean; blockedMe: boolean; myInbox: Inbox; peerInbox: Inbox };
 type Msg = ChatMessage & { pending?: boolean; progress?: number; localUrl?: string };
 type Page = { conversation: Conv; messages: ChatMessage[]; hasMore: boolean };
 
@@ -217,6 +218,7 @@ export function ChatThread({ meId, initial }: { meId: string; initial: Page }) {
     const off = subscribeLive((e) => {
       if (e.type === "resync") return void loadNew();
       if (e.conversationId !== id) return;
+      if (e.type === "inbox") return void loadNew();
       if (e.type === "message") void loadNew();
       else if (e.type === "deleted") setMessages((cur) => cur.map((m) => (m.id === e.messageId ? { ...m, deleted: true, body: null, mediaId: null, posterId: null } : m)));
       else if (e.type === "edited" && e.messageId) void refreshOne(e.messageId);
@@ -465,29 +467,48 @@ export function ChatThread({ meId, initial }: { meId: string; initial: Page }) {
         </ol>
       </div>
 
-      <Composer
-        conversationId={id}
-        disabled={conv.iBlocked || conv.blockedMe}
-        blockedNote={
-          conv.iBlocked ? (
-            <UnblockNote peer={peer} onUnblocked={() => setConv((c) => ({ ...c, iBlocked: false }))} />
-          ) : conv.blockedMe ? (
-            <span>Não é possível enviar mensagens para esta pessoa.</span>
-          ) : null
-        }
-        onText={sendTextMsg}
-        onFile={sendFile}
-        onAudio={sendAudio}
-        editing={editing}
-        onCancelEdit={() => setEditing(null)}
-        onSaveEdit={async (body) => {
-          if (!editing) return true;
-          const ok = await saveEdit(editing.id, body);
-          if (ok) setEditing(null);
-          return ok;
-        }}
-        onEditLast={editLastMine}
-      />
+      {conv.myInbox !== "ACCEPTED" && !conv.iBlocked && !conv.blockedMe ? (
+        <RequestPanel
+          conversationId={id}
+          peer={peer}
+          declined={conv.myInbox === "DECLINED"}
+          onAnswered={(accept) => setConv((c) => ({ ...c, myInbox: accept ? "ACCEPTED" : "DECLINED" }))}
+          onBlocked={() => setConv((c) => ({ ...c, iBlocked: true }))}
+        />
+      ) : (
+        <Composer
+          conversationId={id}
+          disabled={conv.iBlocked || conv.blockedMe || conv.peerInbox === "DECLINED"}
+          note={
+            !conv.iBlocked && !conv.blockedMe && conv.peerInbox === "REQUEST" ? (
+              <span>
+                Pedido de mensagem: {peer.name.split(" ")[0]} ainda não aceitou. Suas mensagens chegam na caixa de pedidos.
+              </span>
+            ) : null
+          }
+          blockedNote={
+            conv.iBlocked ? (
+              <UnblockNote peer={peer} onUnblocked={() => setConv((c) => ({ ...c, iBlocked: false }))} />
+            ) : conv.blockedMe ? (
+              <span>Não é possível enviar mensagens para esta pessoa.</span>
+            ) : conv.peerInbox === "DECLINED" ? (
+              <span>{peer.name.split(" ")[0]} não aceitou seu pedido de mensagem.</span>
+            ) : null
+          }
+          onText={sendTextMsg}
+          onFile={sendFile}
+          onAudio={sendAudio}
+          editing={editing}
+          onCancelEdit={() => setEditing(null)}
+          onSaveEdit={async (body) => {
+            if (!editing) return true;
+            const ok = await saveEdit(editing.id, body);
+            if (ok) setEditing(null);
+            return ok;
+          }}
+          onEditLast={editLastMine}
+        />
+      )}
 
       <Dialog open={!!lightbox} onOpenChange={(o) => !o && setLightbox(null)}>
         <DialogContent className="max-w-[min(96vw,1100px)] border-0 bg-transparent p-0 shadow-none sm:max-w-[min(96vw,1100px)]">
@@ -583,6 +604,61 @@ function ThreadMenu({ peer, blocked, onBlocked }: { peer: ChatPeer; blocked: boo
   );
 }
 
+/** No lugar do campo de mensagem enquanto o pedido de quem não é amigo espera resposta. */
+function RequestPanel({
+  conversationId,
+  peer,
+  declined,
+  onAnswered,
+  onBlocked,
+}: {
+  conversationId: string;
+  peer: ChatPeer;
+  declined: boolean;
+  onAnswered: (accept: boolean) => void;
+  onBlocked: () => void;
+}) {
+  const [pending, start] = useTransition();
+  const first = peer.name.split(" ")[0];
+  const answer = (accept: boolean) =>
+    start(async () => {
+      const r = await answerMessageRequest({ conversationId, accept });
+      if (!r.ok) return void toast.error(r.error);
+      onAnswered(accept);
+      toast.success(accept ? `Pedido aceito. Agora você e ${first} conversam normalmente.` : "Pedido recusado. A conversa saiu da sua lista.");
+    });
+  const block = () =>
+    start(async () => {
+      const r = await setBlocked({ userId: peer.id, blocked: true });
+      if (!r.ok) return void toast.error(r.error);
+      onBlocked();
+      toast.success(`${first} bloqueado. Vocês não trocam mais mensagens.`);
+    });
+  return (
+    <div className="shrink-0 border-t bg-card px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-center">
+      <p className="text-sm font-medium">{declined ? `Você recusou o pedido de ${first}.` : `${first} quer conversar com você.`}</p>
+      <p className="mx-auto mt-1 max-w-md text-xs text-muted-foreground">
+        {declined
+          ? "Se mudar de ideia, aceite: a conversa volta para a sua lista."
+          : "Vocês ainda não são amigos. Até você aceitar, a pessoa não sabe que você leu."}
+      </p>
+      <div className="mt-3 flex flex-wrap justify-center gap-2">
+        <Button size="sm" onClick={() => answer(true)} disabled={pending}>
+          {pending ? <Loader2 className="animate-spin" /> : <Check />} Aceitar
+        </Button>
+        {!declined && (
+          <Button size="sm" variant="outline" onClick={() => answer(false)} disabled={pending}>
+            <X /> Recusar
+          </Button>
+        )}
+        <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={block} disabled={pending}>
+          <Ban /> Bloquear
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function UnblockNote({ peer, onUnblocked }: { peer: ChatPeer; onUnblocked: () => void }) {
   const [pending, start] = useTransition();
   return (
@@ -612,6 +688,7 @@ function Composer({
   conversationId,
   disabled,
   blockedNote,
+  note,
   onText,
   onFile,
   onAudio,
@@ -623,6 +700,8 @@ function Composer({
   conversationId: string;
   disabled: boolean;
   blockedNote: React.ReactNode;
+  /** Aviso discreto acima do campo (ex.: pedido de mensagem ainda não aceito) */
+  note?: React.ReactNode;
   onText: (body: string) => Promise<boolean>;
   onFile: (f: File) => void;
   onAudio: (b: Blob, ms: number) => void;
@@ -742,6 +821,7 @@ function Composer({
 
   return (
     <div className="shrink-0 border-t bg-card px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:px-4">
+      {note && <p className="mx-auto mb-2 max-w-3xl rounded-md bg-muted px-3 py-1.5 text-center text-xs text-muted-foreground">{note}</p>}
       {rec ? (
         <div className="mx-auto flex max-w-3xl items-center gap-2 py-1">
           <Button variant="ghost" size="icon" onClick={() => stopRec(true)} aria-label="Descartar áudio">

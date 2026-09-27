@@ -8,9 +8,10 @@ import type { DataProvider } from "@/lib/providers/types";
 
 /** Registro de fontes. REAL_PROVIDERs novos entram aqui. */
 const REGISTRY: Record<ProviderId, DataProvider> = {
-  mock: mockProvider,
-  osm: osmProvider,
+  // ordem da lista na tela de busca: o Google (mais rápido e completo) primeiro
   google: googlePlacesProvider,
+  osm: osmProvider,
+  mock: mockProvider,
 };
 
 /**

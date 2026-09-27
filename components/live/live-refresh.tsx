@@ -7,7 +7,7 @@ import { subscribeLive, subscribeLiveStatus, type LiveStatus } from "@/lib/clien
 import { cn } from "@/lib/utils";
 
 /** Só estes eventos mudam números da página; mensagens de chat têm canal próprio na tela. */
-const DATA_EVENTS = new Set(["sale", "charge", "profile"]);
+const DATA_EVENTS = new Set(["sale", "charge", "profile", "friend"]);
 
 /**
  * Liga a página ao canal ao vivo (SSE compartilhado da aba). Quando chega um evento,

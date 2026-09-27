@@ -6,13 +6,12 @@ import { PrototypeCardActions } from "@/components/prototypes/prototype-card-act
 import { ScaledSite } from "@/components/prototypes/scaled-site";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/session";
-import { CATEGORIES } from "@/lib/domain/categories";
 import { db } from "@/lib/db";
 import { formatInt, formatRelative } from "@/lib/format";
 import { parseSpec } from "@/lib/prototypes/service";
-import { buildSiteSpec } from "@/lib/templates/build";
 import { previewSpec } from "@/lib/templates/preview";
 import { TEMPLATE_LIST } from "@/lib/templates/registry";
+import { sampleSpec, templateUsedBy } from "@/lib/templates/sample";
 
 export const metadata: Metadata = { title: "Protótipos" };
 
@@ -48,7 +47,11 @@ export default async function PrototypesPage(props: PageProps<"/prototypes">) {
     <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
       <PageHeader
         title="Protótipos"
-        description={showTemplates ? "Cada categoria usa um template pronto. O conteúdo é preenchido com os dados do lead, sem gastar IA." : "Sites montados para os seus leads."}
+        description={
+          showTemplates
+            ? "Cada categoria usa um template pronto. O conteúdo é preenchido com os dados do lead, sem gastar IA. Clique num template para ver o site inteiro."
+            : "Sites montados para os seus leads."
+        }
       />
       <nav className="mt-6 flex gap-1 overflow-x-auto border-b [scrollbar-width:none]" aria-label="Seções de protótipos">
         {[
@@ -70,35 +73,28 @@ export default async function PrototypesPage(props: PageProps<"/prototypes">) {
       {showTemplates ? (
         <ul className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {TEMPLATE_LIST.map((t) => {
-            const cat = CATEGORIES.find((c) => c.template === t.id);
             // Amostra com dados de exemplo — só para visualizar o template
-            const spec = buildSiteSpec({
-              id: `sample-${t.id}`,
-              name: `${t.label.split(" ")[0]} Exemplo`,
-              category: cat?.slug ?? "servicos",
-              city: "Fortaleza",
-              state: "CE",
-              neighborhood: "Aldeota",
-              address: null,
-              phone: null,
-              whatsapp: null,
-              instagram: null,
-              facebook: null,
-              openingHours: [],
-              rating: 4.8,
-              reviewCount: 214,
-              mapsUrl: null,
-              services: [],
-              isDemo: true,
-            });
-            const usedBy = CATEGORIES.filter((c) => c.template === t.id).map((c) => c.plural);
+            const spec = sampleSpec(t);
+            const usedBy = templateUsedBy(t);
             return (
-              <li key={t.id} className="overflow-hidden rounded-lg border bg-card">
-                <ScaledSite spec={previewSpec(spec)} />
+              <li
+                key={t.id}
+                className="group relative overflow-hidden rounded-lg border bg-card shadow-soft transition-[border-color,box-shadow,transform] duration-200 hover:border-foreground/25 hover:shadow-premium motion-safe:hover:-translate-y-px"
+              >
+                <div className="relative">
+                  <ScaledSite spec={previewSpec(spec)} />
+                  <span className="absolute inset-x-0 bottom-3 mx-auto flex w-fit items-center gap-1.5 rounded-full bg-ink/85 px-3 py-1 text-xs font-medium text-white opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+                    <Eye className="size-3.5" /> Visualizar
+                  </span>
+                </div>
                 <div className="border-t p-4">
                   <div className="flex items-center gap-2">
                     <span className="size-3 rounded-full" style={{ background: t.theme.primary }} aria-hidden />
-                    <h3 className="font-semibold">{t.label}</h3>
+                    <h3 className="font-semibold">
+                      <Link href={`/prototypes/templates/${t.id}`} className="after:absolute after:inset-0">
+                        {t.label}
+                      </Link>
+                    </h3>
                     <code className="ml-auto text-[11px] text-muted-foreground">template-{t.id}</code>
                   </div>
                   <p className="mt-1.5 text-sm text-muted-foreground">{t.mood}</p>

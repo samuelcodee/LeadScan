@@ -47,14 +47,21 @@ export const updateProfile = action(
 
 export const updatePrivacy = action(
   {
-    schema: z.object({ profilePublic: z.boolean(), showAccountAge: z.boolean(), rankingOptIn: z.boolean(), presenceVisible: z.boolean() }),
+    schema: z.object({
+      profilePublic: z.boolean(),
+      showAccountAge: z.boolean(),
+      rankingOptIn: z.boolean(),
+      presenceVisible: z.boolean(),
+      friendsOnlyMessages: z.boolean().optional(),
+    }),
     name: "updatePrivacy",
   },
-  async (input, user) => {
+  async ({ friendsOnlyMessages, ...input }, user) => {
     await db.user.update({
       where: { id: user.id },
       data: {
         ...input,
+        ...(friendsOnlyMessages === undefined ? {} : { messagesFrom: friendsOnlyMessages ? "FRIENDS" : "EVERYONE" }),
         rankingOptInAt: input.rankingOptIn ? (user.rankingOptIn ? user.rankingOptInAt : new Date()) : null,
       },
     });

@@ -10,6 +10,15 @@ import type { ChargeStatus } from "@/lib/generated/prisma/client";
  * lib/payments/<nome>.ts e registre em lib/payments/index.ts.
  */
 export type PaymentProviderId = "mock" | "mercadopago" | "stripe";
+/** Quem recebe a cobrança: uma conta conectada (acima) ou "pix" = Pix direto na chave do usuário. */
+export type ChargeProvider = PaymentProviderId | "pix";
+
+export const CHARGE_PROVIDER_LABEL: Record<string, string> = {
+  mercadopago: "Mercado Pago",
+  stripe: "Stripe",
+  mock: "Teste",
+  pix: "Pix direto",
+};
 export type PayMethod = "pix" | "credit_card" | "debit_card";
 
 export const METHOD_LABEL: Record<string, string> = {

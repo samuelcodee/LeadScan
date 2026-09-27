@@ -27,7 +27,7 @@ export function mediaUrl(id: string) {
   return `/api/media/${id}`;
 }
 
-export async function saveImage(opts: { userId: string; kind: ImageKind; input: Buffer; source?: string }) {
+export async function saveImage(opts: { userId: string; kind: ImageKind; input: Buffer; source?: string; name?: string | null }) {
   if (opts.input.byteLength > MAX_UPLOAD_BYTES) throw new UserFacingError("Imagem muito grande. O limite é 6 MB.");
   let meta: Metadata;
   try {
@@ -69,6 +69,7 @@ export async function saveImage(opts: { userId: string; kind: ImageKind; input: 
       moderation: verdict.status,
       moderationNote: verdict.note,
       source: opts.source ?? "upload",
+      name: opts.name?.slice(0, 120) ?? null,
     },
     select: { id: true, width: true, height: true, moderation: true },
   });
@@ -90,10 +91,28 @@ export const MAX_VIDEO_BYTES = 16 * 1024 * 1024;
  * Guarda áudio/vídeo do chat como veio (sem recodificar: o servidor fica leve).
  * Vídeo exige um quadro de capa, que passa pela moderação de imagem antes de tudo.
  */
-export async function saveChatAv(opts: { userId: string; kind: "CHAT_AUDIO" | "CHAT_VIDEO"; input: Buffer }) {
-  const video = opts.kind === "CHAT_VIDEO";
-  const max = video ? MAX_VIDEO_BYTES : MAX_AUDIO_BYTES;
-  if (opts.input.byteLength > max) throw new UserFacingError(video ? "Vídeo muito grande. O limite é 16 MB." : "Áudio muito grande. O limite é 8 MB.");
+type AvKind = "CHAT_AUDIO" | "CHAT_VIDEO" | "FILE_AUDIO" | "FILE_VIDEO";
+const isVideo = (k: AvKind) => k === "CHAT_VIDEO" || k === "FILE_VIDEO";
+
+/** Arquivos (página Arquivos) aceitam mais que o chat: vídeo de apresentação, áudio longo. */
+export const MAX_FILE_VIDEO_BYTES = 40 * 1024 * 1024;
+export const MAX_FILE_AUDIO_BYTES = 20 * 1024 * 1024;
+
+export function avLimit(kind: AvKind) {
+  if (kind === "FILE_VIDEO") return MAX_FILE_VIDEO_BYTES;
+  if (kind === "FILE_AUDIO") return MAX_FILE_AUDIO_BYTES;
+  return kind === "CHAT_VIDEO" ? MAX_VIDEO_BYTES : MAX_AUDIO_BYTES;
+}
+
+function tooBig(kind: AvKind) {
+  const mb = Math.round(avLimit(kind) / 1024 / 1024);
+  return new UserFacingError(isVideo(kind) ? `Vídeo muito grande. O limite é ${mb} MB.` : `Áudio muito grande. O limite é ${mb} MB.`);
+}
+
+export async function saveChatAv(opts: { userId: string; kind: AvKind; input: Buffer; name?: string | null }) {
+  const video = isVideo(opts.kind);
+  const max = avLimit(opts.kind);
+  if (opts.input.byteLength > max) throw tooBig(opts.kind);
   const mime = sniffAv(opts.input, video ? "video" : "audio");
   if (!mime) throw new UserFacingError(video ? "Formato de vídeo não aceito. Envie MP4, MOV ou WebM." : "Formato de áudio não aceito.");
   return db.media.create({
@@ -108,7 +127,61 @@ export async function saveChatAv(opts: { userId: string; kind: "CHAT_AUDIO" | "C
       moderation: "UNVERIFIED",
       moderationNote: video ? "capa moderada" : "áudio",
       source: "upload",
+      name: opts.name?.slice(0, 120) ?? null,
     },
     select: { id: true },
   });
+}
+
+/* ─── Envio em partes (vídeo/áudio grandes) ────────────────────── */
+
+/**
+ * A Vercel recusa corpo acima de 4,5 MB por requisição, então o navegador manda pedaços de
+ * até 3,5 MB. As partes vão direto para o bytea do Media (data = data || parte), marcado
+ * source="partial" até fechar — nada parcial é servido. Sobras abandonadas somem na próxima
+ * 1ª parte (1 h).
+ */
+export const MAX_PART = 3.75 * 1024 * 1024;
+
+export async function appendPart(opts: { userId: string; kind: AvKind; part: Buffer; uploadId: string | null; total?: number; name?: string | null }) {
+  const max = avLimit(opts.kind);
+  if (!opts.part.byteLength) throw new UserFacingError("Parte vazia.");
+  if (opts.part.byteLength > MAX_PART) throw new UserFacingError("Parte grande demais.");
+  if (!opts.uploadId) {
+    if (!opts.total || opts.total > max) throw tooBig(opts.kind);
+    const mime = sniffAv(opts.part, isVideo(opts.kind) ? "video" : "audio");
+    if (!mime) throw new UserFacingError(isVideo(opts.kind) ? "Formato de vídeo não aceito. Envie MP4, MOV ou WebM." : "Formato de áudio não aceito.");
+    await db.media.deleteMany({ where: { userId: opts.userId, source: "partial", createdAt: { lt: new Date(Date.now() - 60 * 60_000) } } });
+    const media = await db.media.create({
+      data: {
+        userId: opts.userId,
+        kind: opts.kind,
+        mime,
+        data: new Uint8Array(opts.part),
+        width: 0,
+        height: 0,
+        size: opts.part.byteLength,
+        moderation: "UNVERIFIED",
+        moderationNote: isVideo(opts.kind) ? "capa moderada" : "áudio",
+        source: "partial",
+        name: opts.name?.slice(0, 120) ?? null,
+      },
+      select: { id: true },
+    });
+    return { upload: media.id, received: opts.part.byteLength };
+  }
+  if (!/^[a-z0-9]{20,40}$/i.test(opts.uploadId)) throw new UserFacingError("Envio inválido.");
+  const rows = await db.$queryRaw<{ size: number }[]>`
+    UPDATE "Media" SET "data" = "data" || ${new Uint8Array(opts.part)}, "size" = "size" + ${opts.part.byteLength}::int
+    WHERE "id" = ${opts.uploadId} AND "userId" = ${opts.userId} AND "source" = 'partial' AND "kind" = ${opts.kind}::"MediaKind" AND "size" + ${opts.part.byteLength}::int <= ${max}::int
+    RETURNING "size"`;
+  if (!rows.length) throw new UserFacingError("Envio expirado ou grande demais. Tente de novo.");
+  return { upload: opts.uploadId, received: Number(rows[0].size) };
+}
+
+/** Fecha o envio em partes: vira mídia normal (só então pode ser servida). */
+export async function finishParts(userId: string, uploadId: string, kind: AvKind) {
+  const { count } = await db.media.updateMany({ where: { id: uploadId, userId, source: "partial", kind }, data: { source: "upload" } });
+  if (!count) throw new UserFacingError("Envio expirado. Tente de novo.");
+  return { id: uploadId };
 }

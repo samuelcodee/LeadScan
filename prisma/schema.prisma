@@ -103,6 +103,9 @@ enum MediaKind {
   CHAT_IMAGE
   CHAT_AUDIO
   CHAT_VIDEO
+  /// Arquivos do usuário (página Arquivos): só o dono baixa, por /api/files/[id]
+  FILE_VIDEO
+  FILE_AUDIO
 }
 
 enum MessageKind {
@@ -140,6 +143,25 @@ enum SaleSource {
   MANUAL
 }
 
+enum FriendshipStatus {
+  PENDING
+  ACCEPTED
+  /// Recusado: quem convidou continua vendo "Convite enviado" (a recusa não é anunciada)
+  DECLINED
+}
+
+/// Caixa de entrada de cada pessoa numa conversa. REQUEST = pedido de mensagem de quem não é amigo.
+enum InboxStatus {
+  ACCEPTED
+  REQUEST
+  DECLINED
+}
+
+enum MessagePolicy {
+  EVERYONE
+  FRIENDS
+}
+
 model User {
   id              String    @id @default(cuid())
   /// Opcional: contas criadas pelo celular não têm e-mail.
@@ -166,27 +188,29 @@ model User {
   onboardedAt     DateTime?
 
   // Perfil público
-  username       String?   @unique
-  bio            String?
-  instagram      String?
-  avatarId       String?   @unique
-  avatar         Media?    @relation("UserAvatar", fields: [avatarId], references: [id], onDelete: SetNull)
+  username        String?       @unique
+  bio             String?
+  instagram       String?
+  avatarId        String?       @unique
+  avatar          Media?        @relation("UserAvatar", fields: [avatarId], references: [id], onDelete: SetNull)
   /// Aberto: perfil visível para a comunidade. Fechado: só você vê.
-  profilePublic  Boolean   @default(true)
-  showAccountAge Boolean   @default(true)
+  profilePublic   Boolean       @default(true)
+  showAccountAge  Boolean       @default(true)
   /// Consentimento (LGPD) para aparecer no ranking e no painel de faturamento da comunidade.
-  rankingOptIn   Boolean   @default(false)
-  rankingOptInAt DateTime?
+  rankingOptIn    Boolean       @default(false)
+  rankingOptInAt  DateTime?
   /// Título exibido ao lado do nome (chave de lib/gamification). Null = nível atual.
-  displayTitle   String?
+  displayTitle    String?
   /// Nível atual (0–10), recalculado a cada venda verificada.
-  level          Int       @default(0)
+  level           Int           @default(0)
   /// Provedor de IA preferido do usuário (id de lib/ai/catalog.ts)
-  aiDefault      String?
+  aiDefault       String?
   /// Última atividade (heartbeat do app aberto): base do online / inativo / offline.
-  lastActiveAt   DateTime?
+  lastActiveAt    DateTime?
   /// false = ninguém vê seu status (online, inativo, offline).
-  presenceVisible Boolean  @default(true)
+  presenceVisible Boolean       @default(true)
+  /// Quem pode começar conversa: todos (quem não é amigo cai em "Pedidos") ou só amigos.
+  messagesFrom    MessagePolicy @default(EVERYONE)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -196,7 +220,7 @@ model User {
   events          LeadEvent[]
   outreaches      Outreach[]
   prototypes      Prototype[]
-  media           Media[]          @relation("UserMedia")
+  media           Media[]              @relation("UserMedia")
   aiConnections   AIConnection[]
   paymentAccounts PaymentAccount[]
   charges         Charge[]
@@ -205,8 +229,12 @@ model User {
   authCodes       AuthCode[]
   memberships     ConversationMember[]
   messages        Message[]
-  blocks          UserBlock[]      @relation("Blocker")
-  blockedBy       UserBlock[]      @relation("Blocked")
+  blocks          UserBlock[]          @relation("Blocker")
+  blockedBy       UserBlock[]          @relation("Blocked")
+  friendRequests  Friendship[]         @relation("FriendRequester")
+  friendInvites   Friendship[]         @relation("FriendAddressee")
+  sweeps          SearchSweep[]
+  bankAccounts    BankAccount[]
 
   @@index([rankingOptIn, level])
 }
@@ -434,8 +462,10 @@ model Media {
   size           Int
   moderation     ModerationStatus
   moderationNote String?
-  /// upload | gemini | openai
+  /// upload | gemini | openai | partial (envio em partes ainda aberto)
   source         String           @default("upload")
+  /// Nome original do arquivo (página Arquivos)
+  name           String?
   createdAt      DateTime         @default(now())
   avatarOf       User?            @relation("UserAvatar")
   messageOf      Message?         @relation("MessageMedia")
@@ -502,6 +532,11 @@ model Charge {
   accountId         String?
   account           PaymentAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
   provider          String
+  /// Pix direto: conta bancária cuja chave recebe o pagamento
+  bankAccountId     String?
+  bankAccount       BankAccount?    @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
+  /// Pix direto: código "copia e cola" (BR Code) gerado na criação — muda a chave depois, a cobrança não muda
+  pixCode           String?
   /// Slug público não adivinhável: /pagar/<slug>
   slug              String          @unique
   description       String
@@ -596,10 +631,12 @@ model ConversationMember {
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// Tudo até aqui foi lido (não lidas = mensagens do outro depois disso).
   lastReadAt     DateTime?
+  /// REQUEST: a conversa veio de quem não é amigo e espera "Aceitar" (não conta como não lida)
+  inbox          InboxStatus  @default(ACCEPTED)
   createdAt      DateTime     @default(now())
 
   @@id([conversationId, userId])
-  @@index([userId])
+  @@index([userId, inbox])
 }
 
 /// Texto, foto, áudio ou vídeo. Mídia fica em Media (servida só para quem está na conversa).
@@ -637,4 +674,81 @@ model UserBlock {
 
   @@id([blockerId, blockedId])
   @@index([blockedId])
+}
+
+// ─── Amizades ────────────────────────────────────────────────────
+
+/// Convite/amizade entre duas pessoas (pairKey = ids ordenados: um registro por par).
+model Friendship {
+  id          String           @id @default(cuid())
+  pairKey     String           @unique
+  requesterId String
+  requester   User             @relation("FriendRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  addresseeId String
+  addressee   User             @relation("FriendAddressee", fields: [addresseeId], references: [id], onDelete: Cascade)
+  status      FriendshipStatus @default(PENDING)
+  createdAt   DateTime         @default(now())
+  respondedAt DateTime?
+
+  @@index([addresseeId, status])
+  @@index([requesterId, status])
+}
+
+// ─── Varredura da busca ──────────────────────────────────────────
+
+/// Onde a busca parou numa cidade (por usuário, fonte e categoria). A próxima busca continua
+/// daqui: nunca repete empresa e para quando a fonte não tem mais nada ("esgotada").
+/// city = "*" guarda a posição da busca geral (state = UF ou "BR"; category = categorias unidas).
+model SearchSweep {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider    String
+  category    String
+  city        String
+  state       String
+  /// Formato da fonte (ex.: pilha de quadrantes do Google, offset da demonstração)
+  cursor      Json?
+  /// Empresas novas entregues por esta varredura, somando todas as buscas
+  found       Int       @default(0)
+  exhausted   Boolean   @default(false)
+  exhaustedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([userId, provider, category, city, state])
+  @@index([userId, provider, exhausted])
+}
+
+// ─── Dados bancários ─────────────────────────────────────────────
+
+/// Conta bancária / chave Pix do usuário. Conta, documento e chave ficam criptografados
+/// (lib/crypto/secrets.ts); a tela só mostra os finais. A chave Pix recebe as cobranças "Pix direto".
+model BankAccount {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Código COMPE (3 dígitos) e nome do banco
+  bankCode     String
+  bankName     String
+  branch       String
+  accountEnc   String
+  accountLast4 String
+  /// corrente | poupanca | pagamento
+  accountType  String
+  holderName   String
+  /// Cidade de quem recebe (vai no código Pix, até 15 letras)
+  city         String   @default("")
+  documentEnc  String
+  documentHint String
+  /// cpf | cnpj | email | telefone | aleatoria
+  pixKeyType   String?
+  pixKeyEnc    String?
+  pixKeyHint   String?
+  isDefault    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  charges      Charge[]
+
+  @@index([userId])
 }

@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { CheckCircle2, Clock3, Lock, XCircle } from "lucide-react";
-import { MockPayButtons, StatusPoller } from "@/components/payments/pay-client";
+import QRCode from "qrcode";
+import { CopyPixCode, MockPayButtons, StatusPoller } from "@/components/payments/pay-client";
 import { Button } from "@/components/ui/button";
 import { db } from "@/lib/db";
 import { formatBRL, formatDate } from "@/lib/format";
@@ -29,6 +30,8 @@ export default async function PayPage(props: PageProps<"/pagar/[slug]">) {
       isTest: true,
       paidAt: true,
       paidMethod: true,
+      pixCode: true,
+      bankAccount: { select: { bankName: true, holderName: true } },
       user: { select: { name: true, agencyName: true } },
     },
   });
@@ -36,6 +39,11 @@ export default async function PayPage(props: PageProps<"/pagar/[slug]">) {
   const seller = charge.user.agencyName ?? charge.user.name;
   const paid = charge.status === "PAID";
   const closed = ["FAILED", "EXPIRED", "CANCELED", "REFUNDED"].includes(charge.status);
+  // Pix direto: QR code desenhado aqui mesmo (SVG), sem serviço externo
+  const pixQr =
+    charge.provider === "pix" && charge.pixCode && !paid && !closed
+      ? await QRCode.toString(charge.pixCode, { type: "svg", margin: 1, errorCorrectionLevel: "M", color: { dark: "#0A0D0F", light: "#FFFFFF" } })
+      : null;
 
   return (
     <main className="min-h-dvh bg-muted/50 px-4 py-10 sm:py-16">
@@ -76,6 +84,28 @@ export default async function PayPage(props: PageProps<"/pagar/[slug]">) {
                 </div>
               ) : charge.provider === "mock" ? (
                 <MockPayButtons slug={charge.slug} methods={charge.methods} />
+              ) : charge.provider === "pix" && charge.pixCode ? (
+                <div className="grid gap-4">
+                  {pixQr && (
+                    <div
+                      className="mx-auto w-56 rounded-lg border bg-white p-2 [&>svg]:h-auto [&>svg]:w-full"
+                      role="img"
+                      aria-label="QR code do Pix"
+                      dangerouslySetInnerHTML={{ __html: pixQr }}
+                    />
+                  )}
+                  <ol className="grid gap-1 text-sm text-muted-foreground">
+                    <li>1. Abra o app do seu banco e escolha Pix.</li>
+                    <li>2. Leia o QR code ou use o Pix copia e cola.</li>
+                    <li>
+                      3. Confira: {formatBRL(charge.amountCents)} para {charge.bankAccount?.holderName ?? seller}.
+                    </li>
+                  </ol>
+                  <CopyPixCode code={charge.pixCode} />
+                  <p className="text-xs text-muted-foreground">
+                    Depois de pagar, {seller} confere no banco e confirma. Esta página muda sozinha quando isso acontecer.
+                  </p>
+                </div>
               ) : (
                 <>
                   {hint === "pendente" && (
@@ -99,7 +129,9 @@ export default async function PayPage(props: PageProps<"/pagar/[slug]">) {
             <Lock className="size-3.5" />
             {charge.provider === "mock"
               ? "Simulação: nenhum dado de cartão é pedido."
-              : `Pagamento processado por ${charge.provider === "mercadopago" ? "Mercado Pago" : "Stripe"}. Seus dados de cartão não passam por aqui.`}
+              : charge.provider === "pix"
+                ? `Pix direto para ${charge.bankAccount?.bankName ?? "a conta de quem cobra"}. O pagamento acontece no app do seu banco.`
+                : `Pagamento processado por ${charge.provider === "mercadopago" ? "Mercado Pago" : "Stripe"}. Seus dados de cartão não passam por aqui.`}
           </div>
         </div>
       </div>

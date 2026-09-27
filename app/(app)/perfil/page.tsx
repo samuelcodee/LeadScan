@@ -124,7 +124,7 @@ export default async function MyProfilePage() {
         </Section>
 
         <Section id="privacidade" title="Privacidade" description="Você decide o que a comunidade vê. Faturamento de ninguém aparece sem consentimento.">
-          <PrivacyFields initial={{ profilePublic: user.profilePublic, showAccountAge: user.showAccountAge, rankingOptIn: user.rankingOptIn, presenceVisible: user.presenceVisible }} />
+          <PrivacyFields initial={{ profilePublic: user.profilePublic, showAccountAge: user.showAccountAge, rankingOptIn: user.rankingOptIn, presenceVisible: user.presenceVisible, friendsOnlyMessages: user.messagesFrom === "FRIENDS" }} />
         </Section>
 
         <Section id="conta" title="Conta" description="Formas de entrar e segurança.">

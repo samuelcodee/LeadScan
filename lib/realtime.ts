@@ -29,7 +29,11 @@ export type LiveEvent =
   | { type: "deleted"; userId: string; conversationId: string; messageId: string }
   | { type: "edited"; userId: string; conversationId: string; messageId: string }
   | { type: "read"; userId: string; conversationId: string; byUserId: string }
-  | { type: "typing"; userId: string; conversationId: string; byUserId: string };
+  | { type: "typing"; userId: string; conversationId: string; byUserId: string }
+  /** convite de amizade recebido/aceito, amizade desfeita, bloqueio */
+  | { type: "friend"; userId: string }
+  /** pedido de mensagem aceito/recusado: a conversa muda de caixa */
+  | { type: "inbox"; userId: string; conversationId: string };
 
 type Envelope = { origin: string; topics: string[]; event: LiveEvent };
 

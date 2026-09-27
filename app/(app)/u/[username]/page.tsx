@@ -8,6 +8,7 @@ import { TimeChart } from "@/components/charts/time-chart";
 import { StatTile } from "@/components/dashboard/widgets";
 import { Instagram } from "@/components/icons";
 import { MessageButton } from "@/components/chat/message-button";
+import { BlockMenu, FriendButton } from "@/components/social/friends";
 import { accountAge, UserAvatar } from "@/components/profile/identity";
 import { Insignia } from "@/components/profile/insignia";
 import { PresenceLabel } from "@/components/chat/presence-label";
@@ -16,6 +17,7 @@ import { requireUser } from "@/lib/auth/session";
 import { badgeKeyFor, getLevel } from "@/lib/gamification/levels";
 import { formatBRL, formatDate, formatInt } from "@/lib/format";
 import { profileView } from "@/lib/profile/queries";
+import { relationWith } from "@/lib/social/friends";
 
 export async function generateMetadata(props: PageProps<"/u/[username]">): Promise<Metadata> {
   const { username } = await props.params;
@@ -28,6 +30,8 @@ export default async function PublicProfilePage(props: PageProps<"/u/[username]"
   const view = await profileView(decodeURIComponent(username).toLowerCase(), viewer.id);
   if (!view) notFound();
   const u = view.user;
+  const relation = await relationWith(viewer.id, u.id);
+  const blocked = relation.kind === "blocked";
   const badge = view.closed ? null : badgeKeyFor(u.displayTitle, u.level);
 
   const header = (
@@ -71,7 +75,17 @@ export default async function PublicProfilePage(props: PageProps<"/u/[username]"
           </Link>
         </Button>
       ) : (
-        u.username && <MessageButton username={u.username} />
+        <div className="flex flex-wrap items-center gap-1.5">
+          {relation.kind === "blocked" ? (
+            <p className="text-sm text-muted-foreground">{relation.byMe ? "Você bloqueou esta pessoa." : "Você não pode interagir com este perfil."}</p>
+          ) : (
+            <>
+              <FriendButton key={relation.kind} person={{ id: u.id, name: u.name, username: u.username }} relation={relation.kind} />
+              {u.username && <MessageButton username={u.username} />}
+            </>
+          )}
+          {(!blocked || relation.byMe) && <BlockMenu person={{ id: u.id, name: u.name, username: u.username }} blocked={blocked} />}
+        </div>
       )}
     </div>
   );

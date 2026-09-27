@@ -12,6 +12,10 @@ import { publish } from "@/lib/realtime";
  *  - uma conversa por par de pessoas (pairKey)
  *  - só quem está na conversa lê, envia ou baixa a mídia dela
  *  - bloqueio vale nos dois sentidos: ninguém envia para quem bloqueou ou foi bloqueado
+ *  - quem não é amigo chega como "pedido de mensagem" (ConversationMember.inbox = REQUEST):
+ *    não conta como não lida, não mostra "visto" e só vira conversa quando a pessoa aceita
+ *    (ou responde). Recusou = a conversa some da lista dela e o outro não envia mais.
+ *  - quem escolheu "só amigos" (User.messagesFrom) não recebe pedido de quem não é amigo
  */
 export const MAX_TEXT = 4000;
 
@@ -113,18 +117,37 @@ export async function isBlockedBetween(a: string, b: string) {
   return n > 0;
 }
 
+async function friendsBetween(a: string, b: string) {
+  const f = await db.friendship.findUnique({ where: { pairKey: pairKey(a, b) }, select: { status: true } });
+  return f?.status === "ACCEPTED";
+}
+
 /** Abre (ou reabre) a conversa com alguém pelo @. */
 export async function openConversation(meId: string, username: string) {
-  const other = await db.user.findUnique({ where: { username: username.toLowerCase() }, select: { id: true, onboardedAt: true, isDemo: true } });
+  const other = await db.user.findUnique({
+    where: { username: username.toLowerCase() },
+    select: { id: true, name: true, onboardedAt: true, isDemo: true, messagesFrom: true },
+  });
   if (!other || !other.onboardedAt || (other.isDemo && !isDemoMode())) throw new UserFacingError("Usuário não encontrado.");
   if (other.id === meId) throw new UserFacingError("Você não pode conversar com você mesmo.");
   const key = pairKey(meId, other.id);
   const existing = await db.conversation.findUnique({ where: { pairKey: key }, select: { id: true } });
-  if (existing) return existing.id;
+  if (existing) {
+    // Abrir de propósito uma conversa que estava em Pedidos (ou recusada) é aceitar
+    await db.conversationMember.updateMany({ where: { conversationId: existing.id, userId: meId, inbox: { not: "ACCEPTED" } }, data: { inbox: "ACCEPTED" } });
+    return existing.id;
+  }
   if (await isBlockedBetween(meId, other.id)) throw new UserFacingError("Não é possível conversar com esta pessoa.");
+  const friends = await friendsBetween(meId, other.id);
+  if (!friends && other.messagesFrom === "FRIENDS") {
+    throw new UserFacingError(`${other.name.split(" ")[0]} só recebe mensagens de amigos. Mande um convite de amizade pelo perfil.`);
+  }
   try {
     const c = await db.conversation.create({
-      data: { pairKey: key, members: { create: [{ userId: meId, lastReadAt: new Date() }, { userId: other.id }] } },
+      data: {
+        pairKey: key,
+        members: { create: [{ userId: meId, lastReadAt: new Date() }, { userId: other.id, inbox: friends ? "ACCEPTED" : "REQUEST" }] },
+      },
       select: { id: true },
     });
     return c.id;
@@ -142,7 +165,8 @@ export async function getConversation(meId: string, conversationId: string) {
     where: { conversationId_userId: { conversationId, userId: meId } },
     select: {
       lastReadAt: true,
-      conversation: { select: { id: true, members: { where: { userId: { not: meId } }, select: { lastReadAt: true, user: { select: PEER_SELECT } } } } },
+      inbox: true,
+      conversation: { select: { id: true, members: { where: { userId: { not: meId } }, select: { lastReadAt: true, inbox: true, user: { select: PEER_SELECT } } } } },
     },
   });
   const other = member?.conversation.members[0];
@@ -154,9 +178,14 @@ export async function getConversation(meId: string, conversationId: string) {
   return {
     id: member.conversation.id,
     peer: toPeer(other.user),
-    peerLastReadAt: other.lastReadAt?.toISOString() ?? null,
+    // Pedido ainda não aceito: a outra pessoa não "viu" nada
+    peerLastReadAt: other.inbox === "ACCEPTED" ? (other.lastReadAt?.toISOString() ?? null) : null,
     iBlocked: iBlocked > 0,
     blockedMe: blockedMe > 0,
+    /** Minha caixa: REQUEST = pedido de mensagem esperando eu aceitar */
+    myInbox: member.inbox,
+    /** Caixa da outra pessoa: REQUEST = meu pedido ainda não foi aceito; DECLINED = recusado */
+    peerInbox: other.inbox,
   };
 }
 
@@ -169,6 +198,17 @@ async function peerOf(meId: string, conversationId: string) {
   const other = await db.conversationMember.findFirst({ where: { conversationId, userId: { not: meId } }, select: { userId: true } });
   if (!other) throw new UserFacingError("Conversa não encontrada.");
   return other.userId;
+}
+
+/** Aceitar (vira conversa normal) ou recusar (some da minha lista; a outra pessoa não envia mais) um pedido. */
+export async function setInbox(meId: string, conversationId: string, accept: boolean) {
+  const { count } = await db.conversationMember.updateMany({
+    where: { conversationId, userId: meId },
+    data: accept ? { inbox: "ACCEPTED", lastReadAt: new Date() } : { inbox: "DECLINED" },
+  });
+  if (!count) throw new UserFacingError("Conversa não encontrada.");
+  const peerId = await peerOf(meId, conversationId);
+  await Promise.all([publish({ type: "inbox", userId: meId, conversationId }), publish({ type: "inbox", userId: peerId, conversationId })]);
 }
 
 /** Página de mensagens (mais novas primeiro no banco; devolvidas em ordem cronológica). */
@@ -201,12 +241,21 @@ export async function sendMessage(
   conversationId: string,
   data: { kind: MessageKind; body?: string | null; mediaId?: string | null; posterId?: string | null; durationMs?: number | null },
 ) {
-  const peerId = await peerOf(meId, conversationId);
-  await assertMember(meId, conversationId);
+  const members = await db.conversationMember.findMany({ where: { conversationId }, select: { userId: true, inbox: true } });
+  const me = members.find((m) => m.userId === meId);
+  const peer = members.find((m) => m.userId !== meId);
+  if (!me || !peer) throw new UserFacingError("Conversa não encontrada.");
+  const peerId = peer.userId;
   if (await isBlockedBetween(meId, peerId)) throw new UserFacingError("Não é possível enviar mensagens para esta pessoa.");
+  if (peer.inbox === "DECLINED") throw new UserFacingError("Esta pessoa não aceitou seu pedido de mensagem.");
   const body = data.body?.trim().slice(0, MAX_TEXT) || null;
   if (data.kind === "TEXT" && !body) throw new UserFacingError("Escreva uma mensagem.");
   const now = new Date();
+  // Responder um pedido é aceitar
+  if (me.inbox !== "ACCEPTED") {
+    await db.conversationMember.update({ where: { conversationId_userId: { conversationId, userId: meId } }, data: { inbox: "ACCEPTED" } });
+    await publish({ type: "inbox", userId: meId, conversationId });
+  }
   const [msg] = await db.$transaction([
     db.message.create({
       data: { conversationId, senderId: meId, kind: data.kind, body, mediaId: data.mediaId ?? null, posterId: data.posterId ?? null, durationMs: data.durationMs ?? null, createdAt: now },
@@ -222,7 +271,9 @@ export async function sendMessage(
 
 export async function markRead(meId: string, conversationId: string) {
   const peerId = await peerOf(meId, conversationId);
-  await db.conversationMember.update({ where: { conversationId_userId: { conversationId, userId: meId } }, data: { lastReadAt: new Date() } });
+  // Pedido de mensagem ainda não aceito: ler não avisa ninguém ("visto" só depois de aceitar)
+  const { count } = await db.conversationMember.updateMany({ where: { conversationId, userId: meId, inbox: "ACCEPTED" }, data: { lastReadAt: new Date() } });
+  if (!count) return;
   const event = { type: "read" as const, conversationId, byUserId: meId };
   await Promise.all([publish({ ...event, userId: peerId }), publish({ ...event, userId: meId })]);
 }
@@ -268,18 +319,19 @@ export async function getMessage(meId: string, conversationId: string, messageId
   return m ? toMessage(m) : null;
 }
 
+/** Não lidas das conversas aceitas (pedidos de mensagem têm contador próprio). */
 export async function unreadTotal(meId: string) {
   const [row] = await db.$queryRaw<{ n: bigint }[]>`
     SELECT COUNT(*) AS n FROM "Message" m
-    JOIN "ConversationMember" cm ON cm."conversationId" = m."conversationId" AND cm."userId" = ${meId}
+    JOIN "ConversationMember" cm ON cm."conversationId" = m."conversationId" AND cm."userId" = ${meId} AND cm."inbox" = 'ACCEPTED'
     WHERE m."senderId" <> ${meId} AND m."deletedAt" IS NULL AND (cm."lastReadAt" IS NULL OR m."createdAt" > cm."lastReadAt")`;
   return Number(row?.n ?? 0);
 }
 
-/** Lista de conversas (com pelo menos uma mensagem), mais recentes primeiro. */
-export async function listConversations(meId: string) {
+/** Lista de conversas (com pelo menos uma mensagem), mais recentes primeiro. `requests` = caixa de pedidos. */
+export async function listConversations(meId: string, box: "inbox" | "requests" = "inbox") {
   const rows = await db.conversationMember.findMany({
-    where: { userId: meId, conversation: { messages: { some: {} } } },
+    where: { userId: meId, inbox: box === "requests" ? "REQUEST" : "ACCEPTED", conversation: { messages: { some: {} } } },
     orderBy: { conversation: { lastMessageAt: "desc" } },
     take: 60,
     select: {
@@ -313,6 +365,11 @@ export async function listConversations(meId: string) {
     });
 }
 export type ConversationItem = Awaited<ReturnType<typeof listConversations>>[number];
+
+/** Pedidos de mensagem esperando resposta (com pelo menos uma mensagem). */
+export async function requestCount(meId: string) {
+  return db.conversationMember.count({ where: { userId: meId, inbox: "REQUEST", conversation: { messages: { some: {} } } } });
+}
 
 /** Pessoas para começar conversa (nome ou @). */
 export async function findPeople(meId: string, q: string) {

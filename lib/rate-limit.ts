@@ -28,6 +28,10 @@ export const LIMITS = {
   /** partes de vídeo/áudio grande (um vídeo de 16 MB = 5 partes) */
   chatChunk: { max: 160, windowMs: 10 * 60_000 },
   presence: { max: 20, windowMs: 60_000 },
+  /** convites de amizade (o serviço ainda limita por dia) */
+  friend: { max: 30, windowMs: 10 * 60_000 },
+  /** arquivos (fotos, vídeos e áudios) e partes de envio grande */
+  files: { max: 200, windowMs: 10 * 60_000 },
 } as const;
 
 export type LimitName = keyof typeof LIMITS;

@@ -165,7 +165,11 @@ export function TitlePicker({ titles, current }: { titles: { key: string; label:
   );
 }
 
-export function PrivacyFields({ initial }: { initial: { profilePublic: boolean; showAccountAge: boolean; rankingOptIn: boolean; presenceVisible: boolean } }) {
+export function PrivacyFields({
+  initial,
+}: {
+  initial: { profilePublic: boolean; showAccountAge: boolean; rankingOptIn: boolean; presenceVisible: boolean; friendsOnlyMessages: boolean };
+}) {
   const [v, setV] = useState(initial);
   const [pending, start] = useTransition();
   const toggle = (k: keyof typeof v) => (value: boolean) => {
@@ -185,6 +189,11 @@ export function PrivacyFields({ initial }: { initial: { profilePublic: boolean; 
     { k: "showAccountAge", title: "Mostrar tempo de conta", body: "Exibe discretamente há quanto tempo você está na plataforma." },
     { k: "rankingOptIn", title: "Participar do ranking e do painel de faturamento", body: "Mostra para a comunidade suas vendas, pontos e o faturamento recebido pela plataforma." },
     { k: "presenceVisible", title: "Mostrar quando estou online", body: "Nas mensagens e no seu perfil aparece se você está online, inativo (há quantos minutos) ou offline. Desligado: ninguém vê seu status." },
+    {
+      k: "friendsOnlyMessages",
+      title: "Só amigos podem me mandar mensagem",
+      body: "Desligado: quem não é seu amigo pode escrever, e a conversa chega em Pedidos para você aceitar ou recusar. Ligado: só amigos conseguem começar conversa.",
+    },
   ];
   return (
     <div className="divide-y rounded-lg border">

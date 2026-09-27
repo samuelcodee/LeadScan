@@ -32,7 +32,7 @@ function start(initial: number | null) {
   started = true;
   if (initial !== null && count === null) count = initial;
   subscribeLive((e) => {
-    if (e.type !== "message" && e.type !== "read" && e.type !== "deleted" && e.type !== "resync") return;
+    if (e.type !== "message" && e.type !== "read" && e.type !== "deleted" && e.type !== "inbox" && e.type !== "resync") return;
     clearTimeout(timer);
     timer = setTimeout(refreshUnread, 350);
   });

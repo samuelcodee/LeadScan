@@ -1,6 +1,6 @@
 "use client";
 
-import { CreditCard, Loader2, QrCode } from "lucide-react";
+import { Check, Copy, CreditCard, Loader2, QrCode } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -64,4 +64,37 @@ export function StatusPoller({ slug, active }: { slug: string; active: boolean }
     return () => clearInterval(t);
   }, [slug, active, router]);
   return null;
+}
+
+/** Botão do Pix copia e cola: copia o código inteiro (o cliente cola no app do banco). */
+export function CopyPixCode({ code }: { code: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="grid gap-2">
+      <textarea
+        readOnly
+        value={code}
+        rows={3}
+        onFocus={(e) => e.target.select()}
+        className="w-full resize-none rounded-md border bg-muted/40 px-3 py-2 font-mono text-[11px] leading-snug text-muted-foreground"
+        aria-label="Código Pix copia e cola"
+      />
+      <Button
+        size="lg"
+        className="h-12 w-full text-base"
+        onClick={() =>
+          navigator.clipboard
+            .writeText(code)
+            .then(() => {
+              setCopied(true);
+              toast.success("Código copiado. Cole no app do seu banco, na opção Pix copia e cola.");
+              setTimeout(() => setCopied(false), 3000);
+            })
+            .catch(() => toast.error("Não deu para copiar. Selecione o código acima e copie."))
+        }
+      >
+        {copied ? <Check /> : <Copy />} {copied ? "Copiado" : "Copiar código Pix"}
+      </Button>
+    </div>
+  );
 }

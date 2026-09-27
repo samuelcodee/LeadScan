@@ -44,7 +44,7 @@ export function ChargeDialog({
   const [amount, setAmount] = useState(0);
   const [description, setDescription] = useState("");
   const [methods, setMethods] = useState<Method[]>(["pix", "credit_card", "debit_card"]);
-  const [result, setResult] = useState<{ url: string; isTest: boolean } | null>(null);
+  const [result, setResult] = useState<{ url: string; isTest: boolean; pix: boolean } | null>(null);
   const [loading, startLoading] = useTransition();
   const [saving, startSaving] = useTransition();
 
@@ -73,7 +73,7 @@ export function ChargeDialog({
     const allowed = methods.filter((m) => current?.methods.includes(m));
     startSaving(async () => {
       const r = await createChargeAction({
-        provider: provider as "mock" | "mercadopago" | "stripe",
+        provider: provider as "mock" | "mercadopago" | "stripe" | "pix",
         amountCents: amount,
         description,
         methods: allowed,
@@ -81,13 +81,15 @@ export function ChargeDialog({
         prototypeId: prototypeId ?? selectedLead?.prototypeId ?? null,
       });
       if (!r.ok) return void toast.error(r.error);
-      setResult({ url: r.data.url, isTest: r.data.isTest });
+      setResult({ url: r.data.url, isTest: r.data.isTest, pix: r.data.pix });
       await navigator.clipboard.writeText(r.data.url).catch(() => {});
       toast.success("Link de pagamento criado e copiado.");
     });
   };
 
-  const waText = result ? `Oi! Segue o link para o pagamento do site (${formatBRL(amount)}). Dá pra pagar com Pix ou cartão: ${result.url}` : "";
+  const waText = result
+    ? `Oi! Segue o link para o pagamento do site (${formatBRL(amount)}). ${result.pix ? "É só abrir e pagar com o Pix (QR code ou copia e cola)" : "Dá pra pagar com Pix ou cartão"}: ${result.url}`
+    : "";
 
   return (
     <>
@@ -100,8 +102,10 @@ export function ChargeDialog({
             <DialogTitle>{result ? "Link pronto" : "Nova cobrança"}</DialogTitle>
             <DialogDescription>
               {result
-                ? "Mande para o cliente. Quando ele pagar, a venda entra no seu financeiro e no ranking na hora."
-                : "O cliente paga numa página segura do provedor. Você não precisa lidar com dados de cartão."}
+                ? result.pix
+                  ? "Mande para o cliente. O Pix cai direto na sua conta; quando cair, marque como recebido em Cobranças."
+                  : "Mande para o cliente. Quando ele pagar, a venda entra no seu financeiro e no ranking na hora."
+                : "O cliente paga pelo link: Pix direto na sua conta, ou Pix e cartão pelo provedor conectado."}
             </DialogDescription>
           </DialogHeader>
 
@@ -137,10 +141,17 @@ export function ChargeDialog({
             </div>
           ) : data.providers.length === 0 ? (
             <div className="grid gap-3 text-sm">
-              <p className="text-muted-foreground">Você ainda não conectou uma conta para receber. Leva 2 minutos com Mercado Pago ou Stripe.</p>
+              <p className="text-muted-foreground">
+                Você ainda não tem onde receber. Cadastre sua chave Pix (grátis, cai direto no seu banco) ou conecte Mercado Pago/Stripe para aceitar cartão.
+              </p>
               <Button asChild>
+                <Link href="/financeiro#bancos" onClick={() => setOpen(false)}>
+                  Cadastrar chave Pix
+                </Link>
+              </Button>
+              <Button asChild variant="outline">
                 <Link href="/financeiro#contas" onClick={() => setOpen(false)}>
-                  Conectar conta de recebimento
+                  Conectar Mercado Pago ou Stripe
                 </Link>
               </Button>
             </div>
@@ -219,6 +230,7 @@ export function ChargeDialog({
                 </div>
               </fieldset>
               {provider === "mock" && <p className="text-xs text-demo">Pagamentos de teste: o cliente vê botões de simulação, sem dinheiro de verdade.</p>}
+              {current?.hint && <p className="text-xs text-muted-foreground">{current.hint}</p>}
               <DialogFooter>
                 <Button type="submit" className="h-10 w-full sm:w-auto" disabled={saving || amount < 500 || !provider}>
                   {saving && <Loader2 className="animate-spin" />} Gerar link de {formatBRL(amount)}

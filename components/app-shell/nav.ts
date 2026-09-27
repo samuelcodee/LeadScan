@@ -1,5 +1,6 @@
 import {
   Columns3,
+  FolderOpen,
   LayoutDashboard,
   MessageCircle,
   MessageSquareText,
@@ -9,6 +10,7 @@ import {
   Settings,
   Star,
   Trophy,
+  UserRoundPlus,
   Users,
   Wallet,
   type LucideIcon,
@@ -27,6 +29,8 @@ export const NAV: NavItem[] = [
   { href: "/financeiro", label: "Financeiro", icon: Wallet, hint: "Cobranças e faturamento", group: "negocio" },
   { href: "/comunidade", label: "Comunidade", icon: Trophy, hint: "Ranking e campeões", group: "negocio" },
   { href: "/mensagens", label: "Mensagens", icon: MessageCircle, hint: "Conversas com outros usuários", group: "negocio" },
+  { href: "/amigos", label: "Amigos", icon: UserRoundPlus, hint: "Convites, amigos e bloqueados", group: "negocio" },
+  { href: "/arquivos", label: "Arquivos", icon: FolderOpen, hint: "Fotos, vídeos e áudios", group: "conta" },
   { href: "/integracoes", label: "Integrações de IA", icon: PlugZap, hint: "Claude, ChatGPT, Gemini…", group: "conta" },
   { href: "/settings", label: "Configurações", icon: Settings, group: "conta" },
 ];

@@ -3,7 +3,7 @@
 import { ImageIcon, Loader2, Mic, PenSquare, Search, Video } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { startConversation } from "@/app/actions/chat";
 import { DemoBadge } from "@/components/common/page-header";
@@ -43,22 +43,43 @@ function Preview({ c }: { c: ConversationItem }) {
   );
 }
 
-export function ConversationList({ initial }: { initial: ConversationItem[] }) {
+type Box = "inbox" | "requests";
+
+export function ConversationList({ initial, initialRequests = 0 }: { initial: ConversationItem[]; initialRequests?: number }) {
+  const [box, setBox] = useState<Box>("inbox");
   const [items, setItems] = useState(initial);
+  const [requests, setRequests] = useState(initialRequests);
   const [filter, setFilter] = useState("");
   const [newOpen, setNewOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const params = useParams<{ id?: string }>();
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const boxRef = useRef<Box>("inbox");
+
+  const load = useCallback(
+    () =>
+      fetch(`/api/chat/conversations?box=${boxRef.current}`, { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j: { conversations: ConversationItem[]; requests: number } | null) => {
+          if (!j) return;
+          setItems(j.conversations);
+          setRequests(j.requests);
+        })
+        .catch(() => {}),
+    [],
+  );
+
+  const switchBox = (next: Box) => {
+    if (next === boxRef.current) return;
+    boxRef.current = next;
+    setBox(next);
+    setFilter("");
+    void load();
+  };
 
   useEffect(() => {
-    const load = () =>
-      fetch("/api/chat/conversations", { cache: "no-store" })
-        .then((r) => (r.ok ? r.json() : null))
-        .then((j: { conversations: ConversationItem[] } | null) => j && setItems(j.conversations))
-        .catch(() => {});
     const off = subscribeLive((e) => {
-      if (e.type !== "message" && e.type !== "read" && e.type !== "deleted" && e.type !== "edited" && e.type !== "resync") return;
+      if (!["message", "read", "deleted", "edited", "inbox", "resync"].includes(e.type)) return;
       clearTimeout(timer.current);
       timer.current = setTimeout(load, 300);
     });
@@ -72,7 +93,7 @@ export function ConversationList({ initial }: { initial: ConversationItem[] }) {
       clearInterval(t);
       clearTimeout(timer.current);
     };
-  }, []);
+  }, [load]);
 
   const q = filter.trim().toLowerCase();
   const shown = q ? items.filter((c) => c.peer.name.toLowerCase().includes(q) || c.peer.username?.includes(q)) : items;
@@ -85,6 +106,34 @@ export function ConversationList({ initial }: { initial: ConversationItem[] }) {
           <PenSquare />
         </Button>
       </div>
+      <div className="flex shrink-0 gap-1 border-b px-2 py-1.5" role="tablist" aria-label="Caixas de mensagens">
+        {(
+          [
+            ["inbox", "Conversas", 0],
+            ["requests", "Pedidos", requests],
+          ] as const
+        ).map(([id, label, n]) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={box === id}
+            onClick={() => switchBox(id)}
+            className={cn(
+              "inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors duration-150 hover:text-foreground",
+              box === id && "bg-muted text-foreground",
+            )}
+          >
+            {label}
+            {n > 0 && <span className="grid h-[18px] min-w-[18px] place-items-center rounded-full bg-lime px-1 text-[10px] font-bold text-ink tabular">{n}</span>}
+          </button>
+        ))}
+      </div>
+      {box === "requests" && (
+        <p className="border-b bg-muted/40 px-4 py-2 text-xs text-muted-foreground">
+          Mensagens de quem não é seu amigo. A pessoa só sabe que você leu depois que você aceitar.
+        </p>
+      )}
       {items.length > 4 && (
         <div className="border-b p-2">
           <div className="relative">
@@ -94,7 +143,12 @@ export function ConversationList({ initial }: { initial: ConversationItem[] }) {
         </div>
       )}
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-        {items.length === 0 ? (
+        {items.length === 0 && box === "requests" ? (
+          <div className="grid place-items-center px-6 py-14 text-center">
+            <p className="font-medium">Nenhum pedido de mensagem</p>
+            <p className="mt-1 max-w-xs text-sm text-muted-foreground">Quando alguém que não é seu amigo escrever, a conversa aparece aqui.</p>
+          </div>
+        ) : items.length === 0 ? (
           <div className="grid place-items-center px-6 py-14 text-center">
             <p className="font-medium">Nenhuma conversa ainda</p>
             <p className="mt-1 max-w-xs text-sm text-muted-foreground">Fale com alguém da comunidade: troque dicas, feche parceria, mande um áudio.</p>

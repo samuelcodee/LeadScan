@@ -11,7 +11,8 @@ export async function GET(request: NextRequest, ctx: RouteContext<"/api/public/p
   const { slug } = await ctx.params;
   const charge = await db.charge.findUnique({ where: { slug }, include: { account: true } });
   if (!charge) return NextResponse.redirect(new URL("/", request.url));
-  if (charge.status !== "PENDING" || charge.provider === "mock") return NextResponse.redirect(new URL(`/pagar/${slug}`, request.url));
+  // Teste e Pix direto não têm checkout de provedor: tudo acontece na própria página
+  if (charge.status !== "PENDING" || charge.provider === "mock" || charge.provider === "pix") return NextResponse.redirect(new URL(`/pagar/${slug}`, request.url));
   try {
     const ready = await ensureCheckout(charge);
     if (!ready.checkoutUrl) throw new Error("sem checkout");

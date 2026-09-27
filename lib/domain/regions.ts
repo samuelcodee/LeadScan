@@ -26,12 +26,14 @@ function shuffle<T>(list: T[], r: () => number) {
 }
 
 /**
- * Cidades de uma busca geral (sem cidade escolhida).
- *  - com UF: primeiro as maiores do estado (onde há mais empresas), depois as demais
- *  - sem UF: capitais e polos do país inteiro, depois cidades médias sorteadas por estado
- * A ordem muda a cada busca (seed = id da busca), então buscas repetidas cobrem lugares novos.
+ * Todas as cidades de uma busca geral (sem cidade escolhida), na ordem em que são percorridas.
+ *  - com UF: primeiro as maiores do estado (onde há mais empresas), depois todas as demais
+ *  - sem UF: capitais e polos do país, intercaladas com as outras 5 mil cidades (um estado
+ *    de cada vez, para a busca ter cara de "Brasil inteiro" desde o começo)
+ * A ordem depende da seed: a busca geral usa uma por pessoa e região e anda por essa lista
+ * a cada busca (SearchSweep com city "*"), pulando o que já foi varrido até o fim.
  */
-export function regionCities(uf: string | undefined, seed: string, max: number): Place[] {
+export function regionOrder(uf: string | undefined, seed: string): Place[] {
   const r = rng(seed);
   if (uf && getState(uf)) {
     const major = CITIES.filter((c) => c.uf === uf).map((c) => ({ name: c.name, uf }));
@@ -39,32 +41,36 @@ export function regionCities(uf: string | undefined, seed: string, max: number):
     const rest = citiesOfState(uf)
       .filter((n) => !majorSet.has(n))
       .map((name) => ({ name, uf }));
-    return [...shuffle(major, r), ...shuffle(rest, r)].slice(0, max);
+    return [...shuffle(major, r), ...shuffle(rest, r)];
   }
   const major = shuffle(
     CITIES.map((c) => ({ name: c.name, uf: c.uf })),
     r,
   );
   const majorSet = new Set(major.map((m) => `${m.name}|${m.uf}`));
-  const others: Place[] = [];
   const states = shuffle(
     [...new Set(CITIES.map((c) => c.uf))],
     r,
   );
-  for (const s of states) {
-    const pool = citiesOfState(s).filter((n) => !majorSet.has(`${n}|${s}`));
-    for (const name of shuffle(pool, r).slice(0, 2)) others.push({ name, uf: s });
-  }
+  // Um estado de cada vez: SP, depois BA, depois AM… (cada fila embaralhada)
+  const queues = states.map((s) => shuffle(citiesOfState(s).filter((n) => !majorSet.has(`${n}|${s}`)), r).map((name) => ({ name, uf: s })));
+  const others: Place[] = [];
+  for (let round = 0; queues.some((q) => round < q.length); round++) for (const q of queues) if (round < q.length) others.push(q[round]);
   // Duas grandes para cada média: volume sem perder a cara de "Brasil inteiro"
   const out: Place[] = [];
   let i = 0;
   let j = 0;
-  while (out.length < max && (i < major.length || j < others.length)) {
+  while (i < major.length || j < others.length) {
     if (i < major.length) out.push(major[i++]);
-    if (i < major.length && out.length < max) out.push(major[i++]);
-    if (j < others.length && out.length < max) out.push(others[j++]);
+    if (i < major.length) out.push(major[i++]);
+    if (j < others.length) out.push(others[j++]);
   }
   return out;
+}
+
+/** As primeiras `max` cidades da ordem (compatível com quem só precisa de algumas). */
+export function regionCities(uf: string | undefined, seed: string, max: number): Place[] {
+  return regionOrder(uf, seed).slice(0, max);
 }
 
 export function regionLabel(uf?: string) {

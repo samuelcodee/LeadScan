@@ -1,10 +1,10 @@
 "use client";
 
 import { Check, ChevronDown, Globe2, Loader2, MapPin, Search, SlidersHorizontal, X } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useDeferredValue, useEffect, useEffectEvent, useMemo, useRef, useState, useTransition } from "react";
+import { useDeferredValue, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { getSearchStatus, startSearch } from "@/app/actions/search";
+import { SearchProgressBar } from "@/components/search/progress";
+import { useSearchRunner } from "@/components/search/use-search-runner";
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
@@ -14,11 +14,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { CATEGORIES, getCategory } from "@/lib/domain/categories";
 import { CITIES, STATES, findCity, getState } from "@/lib/domain/geo";
 import { parseSearchQuery } from "@/lib/domain/query-parser";
-import { DEFAULT_FILTERS, LIMIT_OPTIONS, filtersToParams, type ProviderId, type SearchFilters } from "@/lib/domain/filters";
+import { LIMIT_OPTIONS, type ProviderId, type SearchFilters } from "@/lib/domain/filters";
 import { fold } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 type ProviderOption = { id: ProviderId; label: string; configured: boolean; isDemo: boolean };
+
+/** Uma linha sobre a fonte escolhida (e, para quem administra, como ligar o Google). */
+function providerHint(active: ProviderOption | undefined, googleReady: boolean, isAdmin: boolean) {
+  if (!active) return null;
+  if (active.isDemo) return "Fonte de demonstração: empresas fictícias, marcadas como DEMO. Troque para uma fonte real para prospectar de verdade.";
+  if (active.id === "google") return "Google Maps: nota, avaliações, telefone e fotos. Cada busca continua de onde a anterior parou, até acabarem as empresas da cidade.";
+  const base = "OpenStreetMap: gratuito, sem avaliações. Os servidores públicos ficam lentos em horário de pico.";
+  if (googleReady) return `${base} Para buscar mais rápido, escolha Google Maps.`;
+  return isAdmin ? `${base} Para buscas mais rápidas e com avaliações, ative o Google Maps: configure MAPS_API_KEY (Places API New) na hospedagem.` : base;
+}
 type City = { name: string; uf: string };
 
 const EXAMPLES = [
@@ -33,13 +43,14 @@ export function SearchForm({
   defaultProvider,
   initialQuery = "",
   compact,
+  isAdmin = false,
 }: {
   providers: ProviderOption[];
   defaultProvider: ProviderId;
   initialQuery?: string;
   compact?: boolean;
+  isAdmin?: boolean;
 }) {
-  const router = useRouter();
   const [text, setText] = useState(initialQuery);
   const [categories, setCategories] = useState<string[]>([]);
   const [cities, setCities] = useState<City[]>([]);
@@ -48,8 +59,7 @@ export function SearchForm({
   const [provider, setProvider] = useState<ProviderId>(defaultProvider);
   const [filters, setFilters] = useState<Partial<SearchFilters>>({});
   const [advanced, setAdvanced] = useState(!compact);
-  const [progress, setProgress] = useState<{ done: number; total: number; found: number; href: string } | null>(null);
-  const [pending, start] = useTransition();
+  const { run, progress, pending } = useSearchRunner();
   const parsedOnce = useRef(false);
   // Municípios do IBGE da UF escolhida (buscados sob demanda; o bundle não carrega os 5.571)
   const [ufList, setUfList] = useState<{ uf: string; cities: string[] }>({ uf: "", cities: [] });
@@ -144,40 +154,11 @@ export function SearchForm({
     e?.preventDefault();
     if (!categories.length) return void toast.error("Diga o tipo de negócio. Ex.: “dentistas”, “barbearias”.");
 
-    start(async () => {
-      const r = await startSearch({ query: text || undefined, categories, cities, uf: uf || undefined, limit, provider });
-      if (!r.ok) return void toast.error(r.error);
-      const params = filtersToParams({ ...DEFAULT_FILTERS, ...filters });
-      params.set("s", r.data.searchId);
-      if (r.data.status === "FAILED") return void toast.error(r.data.error ?? "A busca falhou.");
-      if (r.data.status === "DONE") {
-        if (r.data.error) toast.warning(r.data.error);
-        return router.push(`/search?${params}`);
-      }
-      // Lote: acompanha o progresso. Pergunta devagar (1,5 s → 4 s): com muita gente buscando,
-      // polling a cada segundo vira carga à toa. Uma falha isolada não derruba o acompanhamento.
-      const href = `/search?${params}`;
-      setProgress({ done: 0, total: 0, found: 0, href });
-      for (let round = 0, misses = 0; ; round++) {
-        await new Promise((res) => setTimeout(res, Math.min(4000, 1500 + round * 250)));
-        const st = await getSearchStatus({ id: r.data.searchId }).catch(() => null);
-        if (!st?.ok || !st.data) {
-          if (++misses >= 4) break;
-          continue;
-        }
-        misses = 0;
-        setProgress({ done: st.data.progress, total: st.data.total, found: st.data.resultCount, href });
-        if (st.data.status === "DONE" || st.data.status === "FAILED") {
-          if (st.data.error) toast.warning(st.data.error);
-          break;
-        }
-      }
-      setProgress(null);
-      router.push(href);
-    });
+    run({ query: text || undefined, categories, cities, uf: uf || undefined, limit, provider }, filters);
   };
 
   const activeProvider = providers.find((p) => p.id === provider);
+  const hint = providerHint(activeProvider, providers.some((p) => p.id === "google" && p.configured), isAdmin);
   const understood = categories.length > 0 || cities.length > 0;
   const regionText = uf ? `${getState(uf)?.name ?? uf} · todas as cidades` : "Todo o Brasil";
 
@@ -207,29 +188,7 @@ export function SearchForm({
         </Button>
       </div>
 
-      {progress && (
-        <div className="mt-3" role="status" aria-live="polite">
-          <div className="flex justify-between text-xs text-muted-foreground">
-            <span>
-              {cities.length ? "Consultando as cidades escolhidas" : `Buscando em ${regionText}`}
-              {progress.found > 0 && <> · <span className="font-medium text-foreground">{progress.found} empresas até agora</span></>}
-            </span>
-            {progress.total > 0 && (
-              <span className="tabular">
-                {progress.done}/{progress.total}
-              </span>
-            )}
-          </div>
-          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
-            <div className="h-full bg-chart-1 transition-[width] duration-300" style={{ width: `${(progress.done / Math.max(progress.total, 1)) * 100}%` }} />
-          </div>
-          {progress.found > 0 && (
-            <button type="button" onClick={() => router.push(progress.href)} className="mt-2 text-xs font-medium text-foreground underline underline-offset-4">
-              Ver as {progress.found} já encontradas (a busca continua)
-            </button>
-          )}
-        </div>
-      )}
+      {progress && <SearchProgressBar progress={progress} label={cities.length ? "Consultando as cidades escolhidas" : `Buscando em ${regionText}`} />}
 
       {!understood && !text && !compact && (
         <div className="mt-3 flex flex-wrap gap-2">
@@ -335,7 +294,7 @@ export function SearchForm({
                   {providers.map((p) => (
                     <SelectItem key={p.id} value={p.id} disabled={!p.configured}>
                       {p.label}
-                      {!p.configured && " (configurar)"}
+                      {!p.configured && " (não ativado)"}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -343,9 +302,7 @@ export function SearchForm({
             </Field>
           </div>
         )}
-        {advanced && activeProvider?.isDemo && (
-          <p className="mt-2 text-xs text-muted-foreground">Fonte de demonstração: empresas fictícias, marcadas como DEMO. Troque para OpenStreetMap para dados reais e gratuitos.</p>
-        )}
+        {advanced && hint && <p className="mt-2 text-xs text-muted-foreground">{hint}</p>}
       </div>
     </form>
   );

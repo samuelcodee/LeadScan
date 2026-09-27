@@ -5,12 +5,15 @@ import { PageHeader } from "@/components/common/page-header";
 import { TimeChart } from "@/components/charts/time-chart";
 import { StatTile } from "@/components/dashboard/widgets";
 import { AccountsPanel } from "@/components/finance/accounts-panel";
+import { BankAccountsPanel } from "@/components/finance/bank-accounts";
 import { ChargeDialog } from "@/components/finance/charge-dialog";
 import { ChargesTable } from "@/components/finance/charges-table";
 import { ManualSaleDialog } from "@/components/finance/manual-sale-dialog";
+import { Statement } from "@/components/finance/statement";
 import { LiveRefresh } from "@/components/live/live-refresh";
 import { requireUser } from "@/lib/auth/session";
-import { financeSummary, listCharges, listManualSales, revenueSeries, type RevenueRange } from "@/lib/finance/queries";
+import { listBankAccounts } from "@/lib/finance/banks";
+import { financeSummary, listCharges, listManualSales, movements, revenueSeries, type RevenueRange } from "@/lib/finance/queries";
 import { formatBRL, formatDate, formatInt, formatPercent } from "@/lib/format";
 import { listAccounts, listPaymentProviders } from "@/lib/payments/service";
 import { METHOD_LABEL } from "@/lib/payments/types";
@@ -30,13 +33,15 @@ export default async function FinancePage(props: PageProps<"/financeiro">) {
   const user = await requireUser();
   const sp = await props.searchParams;
   const range: RevenueRange = sp.periodo === "12m" ? "12m" : "30d";
-  const [s, series, charges, manual, accounts, base] = await Promise.all([
+  const [s, series, charges, manual, accounts, base, banks, statement] = await Promise.all([
     financeSummary(user.id),
     revenueSeries(user.id, range),
     listCharges(user.id),
     listManualSales(user.id),
     listAccounts(user.id),
     appUrl(),
+    listBankAccounts(user.id),
+    movements(user.id),
   ]);
   const providers = listPaymentProviders();
   const notice = Object.entries(NOTICES).find(([k]) => {
@@ -141,7 +146,7 @@ export default async function FinancePage(props: PageProps<"/financeiro">) {
       <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile label="Total recebido" value={formatBRL(s.totalCents)} context={`${formatInt(s.totalSales)} vendas no total`} />
         <StatTile label="Pela plataforma" value={formatBRL(s.platformCents)} context={`${formatInt(s.platformSales)} vendas verificadas`} />
-        <StatTile label="Por fora" value={formatBRL(s.totalCents - s.platformCents)} context="não conta para ranking" />
+        <StatTile label="Por fora e Pix direto" value={formatBRL(s.totalCents - s.platformCents)} context="não conta para ranking" />
         <StatTile
           label="Meio mais usado"
           value={s.byMethod[0] ? (METHOD_LABEL[s.byMethod[0].method] ?? "Registro manual") : "—"}
@@ -155,10 +160,14 @@ export default async function FinancePage(props: PageProps<"/financeiro">) {
         </Panel>
 
         <div className="grid grid-cols-1 content-start gap-5">
-          <Panel title="Contas de recebimento" id="contas">
+          <Panel title="Contas bancárias e Pix" id="bancos">
+            <BankAccountsPanel accounts={banks} />
+          </Panel>
+
+          <Panel title="Mercado Pago e Stripe" id="contas">
             <AccountsPanel providers={providers} accounts={accounts} />
             <p className="mt-4 text-xs text-muted-foreground">
-              O dinheiro vai direto para a sua conta no provedor. A plataforma não vê dados de cartão e não segura seu saldo.
+              Para aceitar cartão e ter a confirmação automática. O dinheiro vai direto para a sua conta no provedor; a plataforma não vê dados de cartão e não segura seu saldo.
             </p>
           </Panel>
 
@@ -184,6 +193,10 @@ export default async function FinancePage(props: PageProps<"/financeiro">) {
           </Panel>
         </div>
       </div>
+
+      <Panel title="Extrato" className="mt-5" id="extrato">
+        <Statement rows={statement.rows} totals={statement.totals} />
+      </Panel>
     </div>
   );
 }

@@ -12,7 +12,7 @@ import { rescoreOutdated } from "@/lib/leads/ingest";
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
   await rescoreOutdated(user.id);
-  const { saved, favorites, prototypes, unread } = await shellCounts(user.id);
+  const { saved, favorites, prototypes, unread, invites } = await shellCounts(user.id);
 
   const footer = (
     <UserMenu
@@ -24,7 +24,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-dvh">
-      <Sidebar footer={footer} counts={{ "/leads": saved, "/favorites": favorites, "/prototypes": prototypes }} />
+      <Sidebar footer={footer} counts={{ "/leads": saved, "/favorites": favorites, "/prototypes": prototypes, "/amigos": invites }} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar isDemo={user.isDemo} footer={footer} />
         {/* espaço para a navegação inferior no celular */}

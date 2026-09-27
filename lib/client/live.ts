@@ -7,7 +7,7 @@
  */
 export type LiveMessage = {
   /** "resync" = a conexão caiu e voltou: quem mostra contadores/mensagens deve recarregar */
-  type: "sale" | "charge" | "profile" | "message" | "deleted" | "edited" | "read" | "typing" | "resync";
+  type: "sale" | "charge" | "profile" | "message" | "deleted" | "edited" | "read" | "typing" | "friend" | "inbox" | "resync";
   scope: "me" | "community";
   mine?: boolean;
   points?: number;

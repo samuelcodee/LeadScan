@@ -2,8 +2,8 @@
 
 import { z } from "zod";
 import { action, idSchema } from "@/lib/action";
-import { deleteMessage, editMessage, markRead, MAX_TEXT, openConversation, sendMessage } from "@/lib/chat/service";
-import { db } from "@/lib/db";
+import { deleteMessage, editMessage, markRead, MAX_TEXT, openConversation, sendMessage, setInbox } from "@/lib/chat/service";
+import { setBlock } from "@/lib/social/friends";
 
 export const startConversation = action(
   { name: "startConversation", schema: z.object({ username: z.string().trim().min(2).max(40) }), limit: "chat" },
@@ -37,10 +37,17 @@ export const editChatMessage = action(
   async ({ messageId, body }, user) => editMessage(user.id, messageId, body),
 );
 
-/** Bloquear/desbloquear alguém (vale nos dois sentidos para envio de mensagens). */
+/** Bloquear/desbloquear alguém (vale nos dois sentidos; desfaz amizade e convites). */
 export const setBlocked = action({ name: "setBlocked", schema: z.object({ userId: idSchema, blocked: z.boolean() }) }, async ({ userId, blocked }, user) => {
-  if (userId === user.id) return { ok: true };
-  if (blocked) await db.userBlock.upsert({ where: { blockerId_blockedId: { blockerId: user.id, blockedId: userId } }, create: { blockerId: user.id, blockedId: userId }, update: {} });
-  else await db.userBlock.deleteMany({ where: { blockerId: user.id, blockedId: userId } });
+  await setBlock(user.id, userId, blocked);
   return { ok: true };
 });
+
+/** Pedido de mensagem: aceitar (vira conversa normal) ou recusar (some da lista; a pessoa não envia mais). */
+export const answerMessageRequest = action(
+  { name: "answerMessageRequest", schema: z.object({ conversationId: idSchema, accept: z.boolean() }), limit: "chat" },
+  async ({ conversationId, accept }, user) => {
+    await setInbox(user.id, conversationId, accept);
+    return { ok: true };
+  },
+);

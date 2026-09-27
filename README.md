@@ -39,17 +39,23 @@ Depois de reiniciar o computador, suba o banco de novo com `npm run db:start`.
 
 **Prospecção** — busca em linguagem natural (“dentistas em Quixadá sem site”) em **5.571 municípios** (lista oficial do IBGE, a UF é descoberta sozinha) e **85 tipos de negócio**; sem cidade escolhida a busca é **geral** (o estado inteiro ou o Brasil, cidade por cidade); uma empresa que você já tem **não volta** em buscas novas; score 0–100 com motivos; filtros; pipeline; CRM; abordagens em 3 versões; WhatsApp.
 
-**Mensagens** (`/mensagens`) — conversa privada entre usuários com texto, foto, vídeo (até 16 MB) e áudio gravado no próprio app (até 5 min), ao vivo; “digitando…”, “Visto”, editar (a bolha mostra “editada”; seta ↑ no campo vazio edita a última), apagar para todos, bloquear. Status **online / inativo há X min / offline**, que cada pessoa pode ocultar em Perfil → Privacidade. Botão “Mensagem” no perfil público de cada um.
+**Varredura** — cada busca continua de onde a anterior parou: "50 padarias em Fortaleza" duas vezes traz 100 padarias diferentes, e assim até acabar ("varredura completa"; a cidade volta a ser consultada depois de 30 dias). No Google Maps a cidade vira uma grade de quadrantes, então passa do limite de 60 resultados por consulta. A busca geral anda pelo estado ou pelo Brasil inteiro em rodízio, pulando as cidades já esgotadas. Botão **Próximas N** na tela de resultados.
+
+**Mensagens** (`/mensagens`) — conversa privada entre usuários com texto, foto, vídeo (até 16 MB) e áudio gravado no próprio app (até 5 min), ao vivo; “digitando…”, “Visto”, editar (a bolha mostra “editada”; seta ↑ no campo vazio edita a última), apagar para todos, bloquear. Status **online / inativo há X min / offline**, que cada pessoa pode ocultar em Perfil → Privacidade. Botão “Mensagem” no perfil público de cada um. Quem não é amigo cai em **Pedidos**: aceitar, recusar ou bloquear (e dá para receber só de amigos).
+
+**Amigos** (`/amigos`) — convite, aceitar/recusar (a recusa não é anunciada), desfazer amizade, bloquear e desbloquear; busca de pessoas por nome ou @.
+
+**Arquivos** (`/arquivos`) — fotos (até 6 MB, com moderação), vídeos (até 40 MB) e áudios (até 20 MB), enviados em partes; 300 MB por conta. Fotos aparecem como sugestão no estúdio dos protótipos; vídeos e áudios só o dono abre.
 
 **Selos** — cada nível (1 a 10) e cada título de campeão tem uma insígnia própria, que aparece no canto da foto em todo o app (ranking, mensagens, perfil).
 
-**Protótipos** — **22 modelos** por segmento, **8 estilos prontos** (Clássico, Moderno, Minimalista, Aconchegante, Editorial, Vibrante, Ousado, Noturno) e **4 paletas por segmento**. Clientes do mesmo segmento já nascem com paletas diferentes. Fotos reais do negócio entram automaticamente quando a fonte é o Google (com crédito aos autores); dá pra enviar fotos do cliente no editor ou gerar capa com IA.
+**Protótipos** — **22 modelos** por segmento, **8 estilos prontos** (Clássico, Moderno, Minimalista, Aconchegante, Editorial, Vibrante, Ousado, Noturno) e **4 paletas por segmento**. Clientes do mesmo segmento já nascem com paletas diferentes. Fotos reais do negócio entram automaticamente quando a fonte é o Google (com crédito aos autores); dá pra enviar fotos do cliente no editor ou gerar capa com IA. A biblioteca abre cada template inteiro, em desktop, tablet ou celular (`/prototypes/templates/[id]`).
 
 **Contas** — Google, e-mail ou celular (código de 6 dígitos, sem senha). Cadastro pede nome, @ e aceite dos termos; ranking é opt-in.
 
 **Perfil** (`/perfil`, público em `/u/@usuario`) — foto (com moderação +18), nome, bio, Instagram, título escolhido, tempo de conta (pode esconder), perfil aberto/fechado, gráficos semanais de leads fechados/recusados, abordagens, buscas e protótipos.
 
-**Financeiro** (`/financeiro`) — contas de recebimento (Mercado Pago, Stripe, teste), links de cobrança com Pix/crédito/débito, vendas registradas por fora, gráfico por dia/mês, tarifas, ticket médio. **Atualiza ao vivo** quando o cliente paga.
+**Financeiro** (`/financeiro`) — contas bancárias e chaves Pix (criptografadas), **Pix direto** (link de pagamento com QR code e copia e cola que cai na conta do usuário, sem taxa; quem cobra marca como recebido), contas de recebimento (Mercado Pago, Stripe, teste), links de cobrança com Pix/crédito/débito, vendas registradas por fora, **extrato** (entradas, tarifas e estornos), gráfico por dia/mês, ticket médio. **Atualiza ao vivo** quando o cliente paga.
 
 **Comunidade** (`/comunidade`) — ranking **ao vivo** da semana (segunda 00:00 → domingo 23:59, horário de Brasília), do mês e geral (top 100); campeões de cada semana; top 3 do mês; faturamento da plataforma e por conta (só de quem consentiu).
 
@@ -93,10 +99,13 @@ google) → IBGE → cache    motivos, 100% código         → SiteSpec → est
 | `app/api/webhooks/*` | Mercado Pago e Stripe (assinatura verificada, idempotentes) |
 | `app/api/live` | Server-Sent Events (tempo real) |
 | `lib/auth` | sessão assinada com versão, códigos OTP, Google OAuth (PKCE), contas |
-| `lib/payments` | provedores (Mercado Pago, Stripe, teste) + `applyPaymentUpdate` idempotente |
+| `lib/payments` | provedores (Mercado Pago, Stripe, teste), Pix direto (`pix.ts`, BR Code do Banco Central) + `applyPaymentUpdate` idempotente |
+| `lib/finance` | resumo, série, extrato e contas bancárias (`banks.ts`, criptografadas) |
+| `lib/social` | amizades, convites e bloqueio |
 | `lib/gamification`, `lib/ranking` | níveis, pontos, títulos, ranking e pódios (SQL direto das vendas) |
 | `lib/ai` | catálogo de IAs, conexões do usuário (criptografadas), imagens, tarefas com cache |
-| `lib/media` | upload (sharp: redimensiona, WebP, remove EXIF) + moderação |
+| `lib/media` | upload (sharp: redimensiona, WebP, remove EXIF) + moderação, envio em partes, entrega com Range, Arquivos |
+| `lib/providers` | fontes de empresas (Google Maps em grade, OpenStreetMap, demonstração) + cache |
 | `lib/templates` | 22 templates, estilos, paletas, briefing para outras IAs |
 | `lib/domain` | 85 categorias, municípios do IBGE, parser de busca |
 | `lib/realtime.ts` | eventos em memória + LISTEN/NOTIFY do Postgres entre instâncias |
@@ -111,7 +120,7 @@ Busca, filtros, score, templates, estilos, paletas, links, ranking e a primeira 
 
 Tudo em `.env` (modelo comentado em `.env.example`). Nenhuma chave vai para o navegador. **Configurações → Plataforma** mostra o que está ativo.
 
-- **Google Maps / Places (recomendado em produção)** — só `MAPS_API_KEY`: com a chave, vira a fonte padrão sozinho. O OpenStreetMap é grátis mas os servidores públicos oscilam muito (504/tempo esgotado em horário de pico). Custo: cada página de até 20 empresas é uma requisição do SKU Text Search Enterprise (1.000 grátis por mês; depois cerca de US$ 35 por mil). Coloque uma cota diária no Google Cloud para não ter surpresa. Traz nota, avaliações, site, telefone e até 6 fotos por negócio. As fotos passam por um proxy assinado (`/api/places-photo`), então a chave não vaza e ninguém usa o proxy para gastar a sua cota. Revise os [Termos do Google Maps Platform](https://cloud.google.com/maps-platform/terms) antes de produção (armazenamento de conteúdo e atribuição das fotos).
+- **Google Maps / Places (recomendado em produção)** — só `MAPS_API_KEY`: com a chave, vira a fonte padrão sozinho (a menos que `DATA_PROVIDER` diga outra). Busca mais rápida e completa: a cidade é varrida em quadrantes e cada busca continua da anterior (uma leva de 50 costuma custar de 3 a 10 requisições; o contorno da cidade fica guardado 180 dias e cada quadrante 24 h, também entre usuários). Ative a **Places API (New)** no Google Cloud. O OpenStreetMap é grátis mas os servidores públicos oscilam muito (504/tempo esgotado em horário de pico). Custo: cada página de até 20 empresas é uma requisição do SKU Text Search Enterprise (1.000 grátis por mês; depois cerca de US$ 35 por mil). Coloque uma cota diária no Google Cloud para não ter surpresa. Traz nota, avaliações, site, telefone e até 6 fotos por negócio. As fotos passam por um proxy assinado (`/api/places-photo`), então a chave não vaza e ninguém usa o proxy para gastar a sua cota. Revise os [Termos do Google Maps Platform](https://cloud.google.com/maps-platform/terms) antes de produção (armazenamento de conteúdo e atribuição das fotos).
 - **OpenStreetMap** — já funciona, grátis, sem avaliações.
 - **Login Google** — `AUTH_GOOGLE_ID/SECRET` (redirect: `/api/auth/google/callback`). **E-mail**: `RESEND_API_KEY`. **SMS**: Twilio.
 - **Moderação de fotos** — `MODERATION_PROVIDER="openai"` + `MODERATION_API_KEY` (endpoint de moderação da OpenAI, gratuito) ou Sightengine. Em `AUTH_MODE=public` sem moderação, o envio de fotos fica bloqueado.

@@ -36,6 +36,14 @@ export function NavLinks({ onNavigate, counts }: { onNavigate?: () => void; coun
                 <span className="truncate">{item.label}</span>
                 {item.href === "/mensagens" ? (
                   <UnreadBadge className="ml-auto" />
+                ) : item.href === "/amigos" ? (
+                  // convites esperando resposta: pede ação, então destaca como as mensagens não lidas
+                  count !== undefined &&
+                  count > 0 && (
+                    <span className="ml-auto grid h-[18px] min-w-[18px] place-items-center rounded-full bg-lime px-1 text-[10px] font-bold text-ink tabular" aria-label={`${count} convites`}>
+                      {count}
+                    </span>
+                  )
                 ) : (
                   count !== undefined && count > 0 && <span className="ml-auto font-mono text-xs text-[#7b858d] tabular">{count}</span>
                 )}

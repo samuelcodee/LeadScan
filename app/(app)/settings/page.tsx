@@ -67,8 +67,8 @@ export default async function SettingsPage() {
                   </p>
                   <p className="text-sm text-muted-foreground">{p.description}</p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Avaliações: {p.capabilities.reviews ? "sim" : "não"} · Instagram: {p.capabilities.instagram ? "quando mapeado" : "não"} · até{" "}
-                    {formatInt(p.capabilities.maxResults)} por consulta
+                    Avaliações: {p.capabilities.reviews ? "sim" : "não"} · Instagram: {p.capabilities.instagram ? "quando mapeado" : "não"} ·{" "}
+                    {p.id === "google" ? "varre a cidade inteira em partes" : `até ${formatInt(p.capabilities.maxResults)} por consulta`}
                   </p>
                 </div>
                 <Status on={p.configured}>{p.configured ? "Pronto" : p.id === "google" ? "Defina MAPS_API_KEY" : "Indisponível"}</Status>

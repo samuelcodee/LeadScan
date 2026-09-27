@@ -189,6 +189,12 @@ export function generateMockBusiness(q: Omit<ProviderQuery, "limit">, index: num
   };
 }
 
+/** Quantas empresas fictícias uma cidade tem por categoria (80 a 400, sempre o mesmo número). */
+export function mockCityTotal(q: Pick<ProviderQuery, "category" | "city" | "uf">) {
+  const r = rng(`total|${q.category}|${q.city}|${q.uf}`);
+  return 80 + Math.floor(r() * 320);
+}
+
 export const mockProvider: DataProvider = {
   id: "mock",
   label: "Demonstração",
@@ -201,7 +207,9 @@ export const mockProvider: DataProvider = {
   async search(q) {
     const seen = new Set<string>();
     const start = q.offset ?? 0;
-    return Array.from({ length: q.limit }, (_, k) => {
+    // Cada cidade tem um número finito de empresas: dá para ver a varredura chegar ao fim
+    const length = Math.max(0, Math.min(q.limit, mockCityTotal(q) - start));
+    return Array.from({ length }, (_, k) => {
       const i = start + k;
       const b = generateMockBusiness(q, i);
       if (seen.has(b.name)) b.name = `${b.name} ${b.neighborhood}`;
