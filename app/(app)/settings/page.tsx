@@ -71,7 +71,7 @@ export default async function SettingsPage() {
                     {p.id === "google" ? "varre a cidade inteira em partes" : `até ${formatInt(p.capabilities.maxResults)} por consulta`}
                   </p>
                 </div>
-                <Status on={p.configured}>{p.configured ? "Pronto" : p.id === "google" ? "Defina MAPS_API_KEY" : "Indisponível"}</Status>
+                <Status on={p.configured}>{p.configured ? "Pronto" : "Indisponível"}</Status>
               </li>
             ))}
           </ul>
@@ -91,7 +91,7 @@ export default async function SettingsPage() {
               ["Mercado Pago (Pix e cartão)", status.mercadopago, "MP_CLIENT_ID, MP_CLIENT_SECRET e MP_WEBHOOK_SECRET"],
               ["Stripe", status.stripe, "STRIPE_SECRET_KEY e STRIPE_WEBHOOK_SECRET"],
               ["Pagamentos de teste", status.mockPayments, "PAYMENTS_MOCK (ligado no modo demo)"],
-              ["Google Maps (Places)", status.googleConfigured, "MAPS_API_KEY"],
+              ["Google Maps (pago, opcional)", status.googleConfigured, "Desligado: DATA_PROVIDER=google + MAPS_API_KEY ligam"],
             ].map(([label, on, hint]) => (
               <li key={label as string} className="flex flex-wrap items-center justify-between gap-2 p-3">
                 <span className="font-medium">{label as string}</span>

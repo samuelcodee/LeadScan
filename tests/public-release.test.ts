@@ -47,3 +47,32 @@ describe("variáveis coladas no painel", () => {
     expect(m.cleanValue("a\"b")).toBe("a\"b");
   });
 });
+
+describe("Google Maps é pago: só liga de propósito", () => {
+  it("chave sozinha não liga nada; a fonte continua a grátis", async () => {
+    const m = await load({ NODE_ENV: "production", MAPS_API_KEY: "AIza-x", DATA_PROVIDER: "" });
+    expect(m.googleMapsEnabled()).toBe(false);
+    expect(m.dataProviderId()).toBe("osm");
+  });
+
+  it("DATA_PROVIDER=google sem chave cai no OpenStreetMap", async () => {
+    const m = await load({ NODE_ENV: "production", MAPS_API_KEY: "", DATA_PROVIDER: "google" });
+    expect(m.googleMapsEnabled()).toBe(false);
+    expect(m.dataProviderId()).toBe("osm");
+  });
+
+  it("liga só com as duas coisas", async () => {
+    const m = await load({ NODE_ENV: "production", MAPS_API_KEY: "AIza-x", DATA_PROVIDER: "google" });
+    expect(m.googleMapsEnabled()).toBe(true);
+    expect(m.dataProviderId()).toBe("google");
+  });
+
+  it("desligado, o Google some da lista de fontes e as fotos dele não são pedidas", async () => {
+    await load({ NODE_ENV: "production", MAPS_API_KEY: "AIza-x", DATA_PROVIDER: "" });
+    const { listProviders, getProvider } = await import("@/lib/providers");
+    expect(listProviders().map((p) => p.id)).toEqual(["osm"]);
+    expect(getProvider("google").id).toBe("osm");
+    const { leadPhotos } = await import("@/lib/prototypes/service");
+    expect(leadPhotos({ photos: [{ ref: "places/x/photos/y" }] }).photos).toEqual([]);
+  });
+});

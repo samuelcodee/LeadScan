@@ -29,7 +29,6 @@ export default async function SearchPage(props: PageProps<"/search">) {
       defaultProvider={defaultProviderId()}
       initialQuery={query ?? one(sp.q) ?? ""}
       compact={!!searchId}
-      isAdmin={user.role === "ADMIN"}
     />
   );
 

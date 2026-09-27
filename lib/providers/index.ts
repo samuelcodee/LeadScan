@@ -34,7 +34,8 @@ export function defaultProviderId(): ProviderId {
 export function listProviders() {
   const demo = isDemoMode();
   return Object.values(REGISTRY)
-    .filter((p) => demo || !p.isDemo)
+    // Google (pago) só aparece se foi ligado de propósito (DATA_PROVIDER="google" + chave)
+    .filter((p) => (demo || !p.isDemo) && (p.id !== "google" || p.isConfigured()))
     .map((p) => ({
     id: p.id,
     label: p.label,

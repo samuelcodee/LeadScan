@@ -20,14 +20,13 @@ import { cn } from "@/lib/utils";
 
 type ProviderOption = { id: ProviderId; label: string; configured: boolean; isDemo: boolean };
 
-/** Uma linha sobre a fonte escolhida (e, para quem administra, como ligar o Google). */
-function providerHint(active: ProviderOption | undefined, googleReady: boolean, isAdmin: boolean) {
+/** Uma linha sobre a fonte escolhida. */
+function providerHint(active: ProviderOption | undefined, googleReady: boolean) {
   if (!active) return null;
   if (active.isDemo) return "Fonte de demonstração: empresas fictícias, marcadas como DEMO. Troque para uma fonte real para prospectar de verdade.";
   if (active.id === "google") return "Google Maps: nota, avaliações, telefone e fotos. Cada busca continua de onde a anterior parou, até acabarem as empresas da cidade.";
-  const base = "OpenStreetMap: gratuito, sem avaliações. Os servidores públicos ficam lentos em horário de pico.";
-  if (googleReady) return `${base} Para buscar mais rápido, escolha Google Maps.`;
-  return isAdmin ? `${base} Para buscas mais rápidas e com avaliações, ative o Google Maps: configure MAPS_API_KEY (Places API New) na hospedagem.` : base;
+  const base = "OpenStreetMap: grátis, sem limite de uso. Cada busca continua de onde a anterior parou; cidade já consultada volta na hora.";
+  return googleReady ? `${base} Google Maps também está ligado (pago por consulta).` : base;
 }
 type City = { name: string; uf: string };
 
@@ -43,13 +42,11 @@ export function SearchForm({
   defaultProvider,
   initialQuery = "",
   compact,
-  isAdmin = false,
 }: {
   providers: ProviderOption[];
   defaultProvider: ProviderId;
   initialQuery?: string;
   compact?: boolean;
-  isAdmin?: boolean;
 }) {
   const [text, setText] = useState(initialQuery);
   const [categories, setCategories] = useState<string[]>([]);
@@ -158,7 +155,7 @@ export function SearchForm({
   };
 
   const activeProvider = providers.find((p) => p.id === provider);
-  const hint = providerHint(activeProvider, providers.some((p) => p.id === "google" && p.configured), isAdmin);
+  const hint = providerHint(activeProvider, providers.some((p) => p.id === "google" && p.configured));
   const understood = categories.length > 0 || cities.length > 0;
   const regionText = uf ? `${getState(uf)?.name ?? uf} · todas as cidades` : "Todo o Brasil";
 

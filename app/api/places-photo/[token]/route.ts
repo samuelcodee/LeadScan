@@ -1,4 +1,4 @@
-import { env } from "@/lib/env";
+import { env, googleMapsEnabled } from "@/lib/env";
 import { refFromToken } from "@/lib/providers/photos";
 import { rateLimit } from "@/lib/rate-limit";
 
@@ -12,7 +12,8 @@ const WIDTHS = [400, 640, 800, 1600];
 export async function GET(request: Request, ctx: RouteContext<"/api/places-photo/[token]">) {
   const { token } = await ctx.params;
   const ref = refFromToken(token);
-  const key = env().MAPS_API_KEY;
+  // cada foto baixada do Google é cobrada: com o Google desligado, nada sai daqui
+  const key = googleMapsEnabled() ? env().MAPS_API_KEY : "";
   if (!ref || !key) return new Response("Não encontrado", { status: 404 });
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "local";
   if (!rateLimit("photo", ip).ok) return new Response("Muitas requisições", { status: 429 });

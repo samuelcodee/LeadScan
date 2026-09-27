@@ -8,6 +8,7 @@ import type { TemplateId } from "@/lib/domain/categories";
 import { slugify } from "@/lib/format";
 import type { Lead, Prisma } from "@/lib/generated/prisma/client";
 import { randomSlug } from "@/lib/hash";
+import { googleMapsEnabled } from "@/lib/env";
 import { parsePhotos, photoUrl } from "@/lib/providers/photos";
 import { logEvent } from "@/lib/leads/events";
 import { logger } from "@/lib/logger";
@@ -37,9 +38,12 @@ export function leadToSite(lead: Lead): LeadForSite {
   };
 }
 
-/** Fotos reais do lead (Google Places) → URLs do proxy assinado + créditos dos autores. */
+/**
+ * Fotos reais do lead (Google Places) → URLs do proxy assinado + créditos dos autores.
+ * Google desligado (cada foto é cobrada): nenhuma — o site usa as fotos do template.
+ */
 export function leadPhotos(lead: Pick<Lead, "photos">) {
-  const refs = parsePhotos(lead.photos);
+  const refs = googleMapsEnabled() ? parsePhotos(lead.photos) : [];
   return {
     photos: refs.map((p) => photoUrl(p.ref)),
     photoCredits: [...new Set(refs.flatMap((p) => p.credits ?? []))],

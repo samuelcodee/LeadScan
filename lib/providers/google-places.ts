@@ -1,7 +1,7 @@
 import "server-only";
 import { getCategory } from "@/lib/domain/categories";
 import { getState, neighborhoodsFor } from "@/lib/domain/geo";
-import { env } from "@/lib/env";
+import { env, googleMapsEnabled } from "@/lib/env";
 import { fold } from "@/lib/format";
 import { hashKey } from "@/lib/hash";
 import { cachedProviderCall } from "@/lib/providers/cache";
@@ -213,7 +213,8 @@ export const googlePlacesProvider: DataProvider = {
   minIntervalMs: 120,
   // Google aguenta várias cidades ao mesmo tempo (as páginas já são espaçadas em pace())
   concurrency: 4,
-  isConfigured: () => env().MAPS_API_KEY.length > 0,
+  // pago: só com DATA_PROVIDER="google" + chave (lib/env.ts)
+  isConfigured: () => googleMapsEnabled(),
 
   /** Lista direta (sem varredura): cidade + bairros conhecidos, até `limit`. */
   async search(q, signal) {

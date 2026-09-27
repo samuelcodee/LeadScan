@@ -191,7 +191,9 @@ export const osmProvider: DataProvider = {
     // a cidade inteira numa consulta: a varredura segue por ela até a última empresa
     maxResults: 1000,
   },
-  cacheTtlMs: 7 * 24 * 60 * 60 * 1000,
+  // OpenStreetMap muda devagar: 30 dias de cache (igual à volta da varredura). Cidade já consultada
+  // por qualquer pessoa sai na hora, sem esperar os servidores públicos.
+  cacheTtlMs: 30 * 24 * 60 * 60 * 1000,
   minIntervalMs: 400,
   // o rodízio de servidores já é a nova tentativa
   maxAttempts: 1,

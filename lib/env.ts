@@ -108,8 +108,18 @@ export function env(): Env {
 
 export const isDemoMode = () => env().AUTH_MODE === "demo";
 
-/** Fonte de empresas padrão. Versão pública nunca usa dados fictícios. */
-export const dataProviderId = () => env().DATA_PROVIDER ?? (isDemoMode() ? "mock" : env().MAPS_API_KEY ? "google" : "osm");
+/**
+ * Google Maps é PAGO por requisição: só liga com opt-in duplo — DATA_PROVIDER="google" E MAPS_API_KEY.
+ * Uma chave esquecida na hospedagem, sozinha, nunca gera cobrança (busca e fotos ficam no grátis).
+ */
+export const googleMapsEnabled = () => env().DATA_PROVIDER === "google" && env().MAPS_API_KEY.length > 0;
+
+/** Fonte de empresas padrão: OpenStreetMap (grátis). Versão pública nunca usa dados fictícios. */
+export const dataProviderId = () => {
+  const wanted = env().DATA_PROVIDER;
+  if (wanted === "google") return googleMapsEnabled() ? "google" : "osm";
+  return wanted ?? (isDemoMode() ? "mock" : "osm");
+};
 
 /** Pagamentos simulados: ligados por padrão no modo demo, desligados em produção pública. */
 export const mockPaymentsEnabled = () => env().PAYMENTS_MOCK ?? isDemoMode();
@@ -119,7 +129,7 @@ export function integrationStatus() {
   const e = env();
   return {
     dataProvider: dataProviderId(),
-    googleConfigured: e.MAPS_API_KEY.length > 0,
+    googleConfigured: googleMapsEnabled(),
     aiProvider: e.AI_PROVIDER,
     aiConfigured: e.AI_PROVIDER !== "none" && e.AI_API_KEY.length > 0,
     aiModel: e.AI_MODEL || null,
