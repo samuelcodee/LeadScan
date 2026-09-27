@@ -23,9 +23,12 @@ const ERRORS: Record<string, string> = {
   limite: "Muitas tentativas seguidas. Espere alguns minutos.",
 };
 
-export function LoginForm({ next, googleEnabled, demoEnabled, error }: { next: string; googleEnabled: boolean; demoEnabled: boolean; error?: string }) {
+type Props = { next: string; googleEnabled: boolean; channels: { email: boolean; sms: boolean }; demoEnabled: boolean; error?: string };
+
+export function LoginForm({ next, googleEnabled, channels, demoEnabled, error }: Props) {
   const router = useRouter();
-  const [channel, setChannel] = useState<Channel>("EMAIL");
+  const [channel, setChannel] = useState<Channel>(channels.email || !channels.sms ? "EMAIL" : "SMS");
+  const tabs = ([["EMAIL", "E-mail", Mail] as const, ["SMS", "Celular", Smartphone] as const]).filter(([id]) => (id === "EMAIL" ? channels.email : channels.sms));
   const [target, setTarget] = useState("");
   const [sent, setSent] = useState<{ target: string; display: string; devCode: string | null } | null>(null);
   const [code, setCode] = useState("");
@@ -128,6 +131,14 @@ export function LoginForm({ next, googleEnabled, demoEnabled, error }: { next: s
     );
   }
 
+  if (!googleEnabled && tabs.length === 0) {
+    return (
+      <p className="rounded-lg border bg-card px-4 py-3 text-sm text-muted-foreground shadow-soft">
+        As entradas estão fechadas por alguns minutos enquanto terminamos a configuração. Tente de novo daqui a pouco.
+      </p>
+    );
+  }
+
   return (
     <div className="grid gap-5">
       {googleEnabled ? (
@@ -137,65 +148,68 @@ export function LoginForm({ next, googleEnabled, demoEnabled, error }: { next: s
           </a>
         </Button>
       ) : (
-        <Button variant="outline" size="lg" className="h-11" disabled title="Configure AUTH_GOOGLE_ID e AUTH_GOOGLE_SECRET">
-          <GoogleG className="size-[18px] opacity-60" /> Continuar com Google
-        </Button>
+        demoEnabled && (
+          <Button variant="outline" size="lg" className="h-11" disabled title="Configure AUTH_GOOGLE_ID e AUTH_GOOGLE_SECRET">
+            <GoogleG className="size-[18px] opacity-60" /> Continuar com Google
+          </Button>
+        )
       )}
 
-      <div className="flex items-center gap-3 text-xs text-muted-foreground">
-        <span className="h-px flex-1 bg-border" /> ou receba um código <span className="h-px flex-1 bg-border" />
-      </div>
+      {tabs.length > 0 && (googleEnabled || demoEnabled) && (
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          <span className="h-px flex-1 bg-border" /> ou receba um código <span className="h-px flex-1 bg-border" />
+        </div>
+      )}
 
-      <div role="tablist" aria-label="Como entrar" className="grid grid-cols-2 rounded-lg bg-muted p-1">
-        {(
-          [
-            ["EMAIL", "E-mail", Mail],
-            ["SMS", "Celular", Smartphone],
-          ] as const
-        ).map(([id, label, Icon]) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-selected={channel === id}
-            onClick={() => {
-              setChannel(id);
-              setTarget("");
-            }}
-            className={cn(
-              "flex h-9 items-center justify-center gap-1.5 rounded-md text-sm font-medium text-muted-foreground transition-colors duration-150",
-              channel === id && "bg-background text-foreground shadow-sm",
-            )}
-          >
-            <Icon className="size-4" /> {label}
-          </button>
-        ))}
-      </div>
+      {tabs.length > 1 && (
+        <div role="tablist" aria-label="Como entrar" className="grid grid-cols-2 rounded-lg bg-muted p-1">
+          {tabs.map(([id, label, Icon]) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={channel === id}
+              onClick={() => {
+                setChannel(id);
+                setTarget("");
+              }}
+              className={cn(
+                "flex h-9 items-center justify-center gap-1.5 rounded-md text-sm font-medium text-muted-foreground transition-colors duration-150",
+                channel === id && "bg-background text-foreground shadow-sm",
+              )}
+            >
+              <Icon className="size-4" /> {label}
+            </button>
+          ))}
+        </div>
+      )}
 
-      <form onSubmit={send} className="grid gap-3">
-        <Label htmlFor="target">{channel === "EMAIL" ? "Seu e-mail" : "Seu celular com DDD"}</Label>
-        <Input
-          id="target"
-          value={target}
-          onChange={(e) => setTarget(e.target.value)}
-          type={channel === "EMAIL" ? "email" : "tel"}
-          inputMode={channel === "EMAIL" ? "email" : "tel"}
-          autoComplete={channel === "EMAIL" ? "email" : "tel-national"}
-          placeholder={channel === "EMAIL" ? "voce@empresa.com.br" : "(85) 99999-8888"}
-          className="h-11"
-          required
-        />
-        <Button type="submit" size="lg" className="h-11" disabled={pending || target.trim().length < 5}>
-          {pending ? <Loader2 className="animate-spin" /> : <ArrowRight />} Receber código
-        </Button>
-      </form>
+      {tabs.length > 0 && (
+        <form onSubmit={send} className="grid gap-3">
+          <Label htmlFor="target">{channel === "EMAIL" ? "Seu e-mail" : "Seu celular com DDD"}</Label>
+          <Input
+            id="target"
+            value={target}
+            onChange={(e) => setTarget(e.target.value)}
+            type={channel === "EMAIL" ? "email" : "tel"}
+            inputMode={channel === "EMAIL" ? "email" : "tel"}
+            autoComplete={channel === "EMAIL" ? "email" : "tel-national"}
+            placeholder={channel === "EMAIL" ? "voce@empresa.com.br" : "(85) 99999-8888"}
+            className="h-11"
+            required
+          />
+          <Button type="submit" size="lg" className="h-11" disabled={pending || target.trim().length < 5}>
+            {pending ? <Loader2 className="animate-spin" /> : <ArrowRight />} Receber código
+          </Button>
+        </form>
+      )}
 
       {demoEnabled && (
         <>
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
             <span className="h-px flex-1 bg-border" /> só olhando <span className="h-px flex-1 bg-border" />
           </div>
-          <Button asChild variant="ghost" size="lg" className="h-11">
+          <Button asChild variant="ghost" size="lg" className="h-auto min-h-11 py-2 text-center whitespace-normal">
             <Link href={`/api/auth/demo?next=${encodeURIComponent(next)}`} prefetch={false}>
               Explorar a demonstração (dados fictícios)
             </Link>

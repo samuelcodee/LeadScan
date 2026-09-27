@@ -14,6 +14,15 @@ export class MessagingUnavailableError extends UserFacingError {}
 
 const isProd = () => env().NODE_ENV === "production";
 
+/** Canais de código que funcionam nesta instalação (em dev o código aparece na tela, então todos valem). */
+export function loginChannels() {
+  const e = env();
+  return {
+    email: Boolean(e.RESEND_API_KEY) || !isProd(),
+    sms: Boolean(e.TWILIO_ACCOUNT_SID && e.TWILIO_AUTH_TOKEN && e.TWILIO_FROM) || !isProd(),
+  };
+}
+
 export async function sendEmail(msg: { to: string; subject: string; text: string; html?: string }): Promise<SendResult> {
   const e = env();
   if (!e.RESEND_API_KEY) {

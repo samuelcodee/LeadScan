@@ -63,7 +63,7 @@ export function ShareDialog({
       <DialogTrigger asChild>
         {trigger ?? (
           <Button>
-            <Send /> Enviar para cliente
+            <Send /> Enviar<span className="hidden sm:inline"> para cliente</span>
           </Button>
         )}
       </DialogTrigger>

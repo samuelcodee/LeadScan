@@ -154,7 +154,7 @@ export default async function FinancePage(props: PageProps<"/financeiro">) {
           <ChargesTable rows={charges} baseUrl={base} />
         </Panel>
 
-        <div className="grid content-start gap-5">
+        <div className="grid grid-cols-1 content-start gap-5">
           <Panel title="Contas de recebimento" id="contas">
             <AccountsPanel providers={providers} accounts={accounts} />
             <p className="mt-4 text-xs text-muted-foreground">

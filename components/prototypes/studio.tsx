@@ -233,7 +233,7 @@ export function Studio({
           </ToggleGroupItem>
         </ToggleGroup>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" className="lg:hidden" onClick={() => setEditorOpen(true)}>
             <PanelLeft /> Editar
           </Button>

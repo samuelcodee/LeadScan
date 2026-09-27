@@ -6,26 +6,38 @@ import { Logo } from "@/components/app-shell/logo";
 import { getCurrentUser, safeNext } from "@/lib/auth/session";
 import { googleEnabled } from "@/lib/auth/google";
 import { isDemoMode } from "@/lib/env";
+import { loginChannels } from "@/lib/messaging";
 
-export const metadata: Metadata = { title: "Entrar" };
+export const metadata: Metadata = { title: "Entrar ou criar conta" };
 
 export default async function LoginPage(props: PageProps<"/login">) {
-  const { next, erro } = await props.searchParams;
+  const { next, erro, criar } = await props.searchParams;
+  const signup = criar === "1";
   const target = safeNext(next);
   const user = await getCurrentUser();
   if (user) redirect(user.onboardedAt ? target : `/onboarding?next=${encodeURIComponent(target)}`);
 
   return (
-    <main className="grid min-h-dvh lg:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)]">
-      <div className="flex flex-col px-5 py-8 sm:px-10">
+    <main className="grid min-h-dvh grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)]">
+      <div className="flex min-w-0 flex-col px-5 py-8 sm:px-10">
         <Link href="/" className="w-fit" aria-label="LeadScan — página inicial">
           <Logo boxed />
         </Link>
         <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center py-10">
-          <h1 className="text-[28px] font-bold tracking-tight">Entrar ou criar conta</h1>
-          <p className="mt-2 text-sm text-muted-foreground">Primeira vez? A conta é criada quando você confirma o código. Sem senha pra decorar.</p>
+          <h1 className="text-[28px] font-bold tracking-tight">{signup ? "Criar sua conta" : "Entrar ou criar conta"}</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {signup
+              ? "Use o Google, seu e-mail ou celular. A conta nasce quando você confirma o código, sem senha pra decorar."
+              : "Primeira vez? A conta é criada quando você confirma o código. Sem senha pra decorar."}
+          </p>
           <div className="mt-8">
-            <LoginForm next={target} googleEnabled={googleEnabled()} demoEnabled={isDemoMode()} error={typeof erro === "string" ? erro : undefined} />
+            <LoginForm
+              next={target}
+              googleEnabled={googleEnabled()}
+              channels={loginChannels()}
+              demoEnabled={isDemoMode()}
+              error={typeof erro === "string" ? erro : undefined}
+            />
           </div>
           <p className="mt-8 text-xs leading-relaxed text-muted-foreground">
             Ao continuar você concorda com os{" "}

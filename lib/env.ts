@@ -13,8 +13,11 @@ const bool = z
 const schema = z.object({
   DATABASE_URL: z.string().min(1, "DATABASE_URL não configurada"),
   AUTH_SECRET: z.string().default(""),
-  /** demo = mostra "Entrar na demonstração" no login; public = só contas reais. */
-  AUTH_MODE: z.enum(["demo", "public"]).default("demo"),
+  /**
+   * demo = mostra "Explorar a demonstração" no login; public = só contas reais.
+   * Sem valor: public em produção (versão aberta ao público), demo no desenvolvimento.
+   */
+  AUTH_MODE: z.enum(["demo", "public"]).optional(),
   /** Chave de 32 bytes (base64) para criptografar chaves de API e tokens de pagamento. */
   ENCRYPTION_KEY: z.string().default(""),
   ADMIN_EMAILS: z.string().default(""),
@@ -65,7 +68,7 @@ const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
 });
 
-type Env = z.infer<typeof schema>;
+type Env = Omit<z.infer<typeof schema>, "AUTH_MODE"> & { AUTH_MODE: "demo" | "public" };
 
 let cached: Env | null = null;
 
@@ -87,7 +90,8 @@ export function env(): Env {
   if (parsed.data.NODE_ENV === "production" && parsed.data.AUTH_SECRET.length < 32) {
     throw new Error("AUTH_SECRET precisa ter pelo menos 32 caracteres em produção.");
   }
-  cached = parsed.data;
+  const authMode = parsed.data.AUTH_MODE ?? (parsed.data.NODE_ENV === "production" ? "public" : "demo");
+  cached = { ...parsed.data, AUTH_MODE: authMode };
   return cached;
 }
 
