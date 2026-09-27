@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { loginWithGoogle } from "@/lib/auth/accounts";
-import { googleExchange } from "@/lib/auth/google";
+import { GoogleAuthError, googleExchange } from "@/lib/auth/google";
 import { safeNext, setSessionCookie } from "@/lib/auth/session";
 import { safeEqual, unsignValue } from "@/lib/auth/token";
 import { logger } from "@/lib/logger";
@@ -33,7 +33,14 @@ export async function GET(request: NextRequest) {
     res.cookies.delete({ name: STATE_COOKIE, path: "/api/auth/google" });
     return res;
   } catch (err) {
-    logger.error("login google falhou", { err });
-    return fail("google-falhou");
+    logger.error("login google falhou", { err: String(err) });
+    if (err instanceof GoogleAuthError) {
+      if (err.reason === "config") return fail("google-config");
+      if (err.reason === "redirect") return fail("google-redirect");
+      if (err.reason === "code") return fail("google-expirado");
+      return fail("google-falhou");
+    }
+    // Google respondeu certo; o problema foi ao salvar a conta/sessão
+    return fail("google-conta");
   }
 }

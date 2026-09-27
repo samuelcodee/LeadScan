@@ -30,6 +30,19 @@ export function googleAuthUrl(opts: { redirectUri: string; state: string; challe
   return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
 }
 
+/**
+ * Falha do Google com o motivo separado: "config" = client_id/segredo errados (invalid_client),
+ * "redirect" = endereço de retorno diferente do cadastrado, "code" = código vencido/reusado.
+ */
+export class GoogleAuthError extends Error {
+  constructor(
+    public reason: "config" | "redirect" | "code" | "other",
+    detail: string,
+  ) {
+    super(detail);
+  }
+}
+
 export async function googleExchange(opts: { code: string; verifier: string; redirectUri: string }): Promise<GoogleProfile> {
   const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
@@ -44,7 +57,14 @@ export async function googleExchange(opts: { code: string; verifier: string; red
     }),
     signal: AbortSignal.timeout(10_000),
   });
-  if (!tokenRes.ok) throw new Error(`Google token ${tokenRes.status}`);
+  if (!tokenRes.ok) {
+    const body = (await tokenRes.json().catch(() => ({}))) as { error?: string; error_description?: string };
+    const detail = `Google token ${tokenRes.status}: ${body.error ?? "?"} ${body.error_description ?? ""}`.trim();
+    if (body.error === "invalid_client" || body.error === "unauthorized_client") throw new GoogleAuthError("config", detail);
+    if (body.error === "redirect_uri_mismatch") throw new GoogleAuthError("redirect", detail);
+    if (body.error === "invalid_grant") throw new GoogleAuthError("code", detail);
+    throw new GoogleAuthError("other", detail);
+  }
   const token = (await tokenRes.json()) as { access_token?: string };
   if (!token.access_token) throw new Error("Google não devolveu access_token");
 

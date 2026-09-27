@@ -19,7 +19,10 @@ const ERRORS: Record<string, string> = {
   "google-cancelado": "Login com Google cancelado.",
   "google-expirado": "A tentativa com Google expirou. Tente de novo.",
   "google-estado": "Não conseguimos confirmar o retorno do Google. Tente de novo.",
-  "google-falhou": "O Google não respondeu como esperado. Tente de novo ou use e-mail.",
+  "google-falhou": "O Google não respondeu como esperado. Tente de novo em instantes.",
+  "google-config": "Login com Google recusado: a chave secreta (AUTH_GOOGLE_SECRET) ou o ID do cliente não confere. Confira na hospedagem.",
+  "google-redirect": "Login com Google recusado: o endereço de retorno não está cadastrado no Google Cloud.",
+  "google-conta": "O Google confirmou você, mas não conseguimos abrir sua conta. Tente de novo em instantes.",
   limite: "Muitas tentativas seguidas. Espere alguns minutos.",
 };
 

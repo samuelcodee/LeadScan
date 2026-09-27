@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { isAIEnabled } from "@/lib/ai";
 import { generateCopyAI, personalizeTemplate } from "@/lib/ai/tasks";
 import { db } from "@/lib/db";
+import { cleanValue } from "@/lib/env";
 import type { TemplateId } from "@/lib/domain/categories";
 import { slugify } from "@/lib/format";
 import type { Lead, Prisma } from "@/lib/generated/prisma/client";
@@ -54,7 +55,8 @@ export function parseSpec(json: unknown): SiteSpec {
  * da requisição atual (útil em dev, quando a porta muda).
  */
 export async function appUrl() {
-  const fromEnv = process.env.NEXT_PUBLIC_APP_URL;
+  // mesma limpeza do env(): valor colado com espaço/quebra de linha ou aspas quebra o retorno do Google
+  const fromEnv = process.env.NEXT_PUBLIC_APP_URL ? cleanValue(process.env.NEXT_PUBLIC_APP_URL) : "";
   if (fromEnv) return fromEnv.replace(/\/$/, "");
   try {
     const h = await headers();
