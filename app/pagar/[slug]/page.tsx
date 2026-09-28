@@ -39,9 +39,9 @@ export default async function PayPage(props: PageProps<"/pagar/[slug]">) {
   const seller = charge.user.agencyName ?? charge.user.name;
   const paid = charge.status === "PAID";
   const closed = ["FAILED", "EXPIRED", "CANCELED", "REFUNDED"].includes(charge.status);
-  // Pix direto: QR code desenhado aqui mesmo (SVG), sem serviço externo
+  // Pix (direto ou "na hora" do Mercado Pago): QR code desenhado aqui mesmo (SVG), sem serviço externo
   const pixQr =
-    charge.provider === "pix" && charge.pixCode && !paid && !closed
+    charge.pixCode && !paid && !closed
       ? await QRCode.toString(charge.pixCode, { type: "svg", margin: 1, errorCorrectionLevel: "M", color: { dark: "#0A0D0F", light: "#FFFFFF" } })
       : null;
 
@@ -84,7 +84,7 @@ export default async function PayPage(props: PageProps<"/pagar/[slug]">) {
                 </div>
               ) : charge.provider === "mock" ? (
                 <MockPayButtons slug={charge.slug} methods={charge.methods} />
-              ) : charge.provider === "pix" && charge.pixCode ? (
+              ) : charge.pixCode ? (
                 <div className="grid gap-4">
                   {pixQr && (
                     <div
@@ -98,12 +98,15 @@ export default async function PayPage(props: PageProps<"/pagar/[slug]">) {
                     <li>1. Abra o app do seu banco e escolha Pix.</li>
                     <li>2. Leia o QR code ou use o Pix copia e cola.</li>
                     <li>
-                      3. Confira: {formatBRL(charge.amountCents)} para {charge.bankAccount?.holderName ?? seller}.
+                      3. Confira o valor: {formatBRL(charge.amountCents)}
+                      {charge.provider === "pix" ? ` para ${charge.bankAccount?.holderName ?? seller}` : ""}.
                     </li>
                   </ol>
                   <CopyPixCode code={charge.pixCode} />
                   <p className="text-xs text-muted-foreground">
-                    Depois de pagar, {seller} confere no banco e confirma. Esta página muda sozinha quando isso acontecer.
+                    {charge.provider === "pix"
+                      ? `Depois de pagar, ${seller} confere no banco e confirma. Esta página muda sozinha quando isso acontecer.`
+                      : "A confirmação é automática: esta página muda sozinha assim que o Pix cair."}
                   </p>
                 </div>
               ) : (
@@ -131,6 +134,8 @@ export default async function PayPage(props: PageProps<"/pagar/[slug]">) {
               ? "Simulação: nenhum dado de cartão é pedido."
               : charge.provider === "pix"
                 ? `Pix direto para ${charge.bankAccount?.bankName ?? "a conta de quem cobra"}. O pagamento acontece no app do seu banco.`
+                : charge.pixCode
+                  ? "Pix processado pelo Mercado Pago. O pagamento acontece no app do seu banco."
                 : `Pagamento processado por ${charge.provider === "mercadopago" ? "Mercado Pago" : "Stripe"}. Seus dados de cartão não passam por aqui.`}
           </div>
         </div>

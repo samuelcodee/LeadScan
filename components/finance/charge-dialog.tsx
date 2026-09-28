@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Copy, ExternalLink, Loader2, MessageCircle, Receipt } from "lucide-react";
+import { Check, Copy, ExternalLink, Link2, Loader2, MessageCircle, QrCode, Receipt } from "lucide-react";
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatBRL } from "@/lib/format";
+import { buildWhatsAppLink } from "@/lib/whatsapp/link";
 import { cn } from "@/lib/utils";
 
 type Data = Extract<Awaited<ReturnType<typeof chargeDialogData>>, { ok: true }>["data"];
@@ -44,7 +45,9 @@ export function ChargeDialog({
   const [amount, setAmount] = useState(0);
   const [description, setDescription] = useState("");
   const [methods, setMethods] = useState<Method[]>(["pix", "credit_card", "debit_card"]);
-  const [result, setResult] = useState<{ url: string; isTest: boolean; pix: boolean } | null>(null);
+  const [result, setResult] = useState<{ url: string; isTest: boolean; pix: boolean; pixCode: string | null; auto: boolean; qr: string | null } | null>(null);
+  // Mercado Pago: "QR do Pix agora" (padrão, mais rápido) ou link do checkout com Pix e cartão
+  const [mpMode, setMpMode] = useState<"qr" | "link">("qr");
   const [loading, startLoading] = useTransition();
   const [saving, startSaving] = useTransition();
 
@@ -68,9 +71,11 @@ export function ChargeDialog({
   const current = data?.providers.find((p) => p.id === provider);
   const selectedLead = data?.leads.find((l) => l.id === lead);
 
+  const instantPix = provider === "mercadopago" && mpMode === "qr";
+
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    const allowed = methods.filter((m) => current?.methods.includes(m));
+    const allowed = instantPix ? (["pix"] as Method[]) : methods.filter((m) => current?.methods.includes(m));
     startSaving(async () => {
       const r = await createChargeAction({
         provider: provider as "mock" | "mercadopago" | "stripe" | "pix",
@@ -79,17 +84,26 @@ export function ChargeDialog({
         methods: allowed,
         leadId: lead === "none" ? null : lead,
         prototypeId: prototypeId ?? selectedLead?.prototypeId ?? null,
+        instantPix,
       });
       if (!r.ok) return void toast.error(r.error);
-      setResult({ url: r.data.url, isTest: r.data.isTest, pix: r.data.pix });
-      await navigator.clipboard.writeText(r.data.url).catch(() => {});
-      toast.success("Link de pagamento criado e copiado.");
+      // QR desenhado no navegador a partir do copia e cola (a lib só baixa quando precisa)
+      const qr = r.data.pixCode
+        ? await import("qrcode").then((m) => m.toString(r.data.pixCode!, { type: "svg", margin: 1, errorCorrectionLevel: "M", color: { dark: "#0A0D0F", light: "#FFFFFF" } })).catch(() => null)
+        : null;
+      setResult({ url: r.data.url, isTest: r.data.isTest, pix: r.data.pix, pixCode: r.data.pixCode, auto: r.data.auto, qr });
+      await navigator.clipboard.writeText(r.data.pixCode ?? r.data.url).catch(() => {});
+      toast.success(r.data.pixCode ? "Pix gerado. Código copia e cola copiado." : "Link de pagamento criado e copiado.");
     });
   };
 
   const waText = result
-    ? `Oi! Segue o link para o pagamento do site (${formatBRL(amount)}). ${result.pix ? "É só abrir e pagar com o Pix (QR code ou copia e cola)" : "Dá pra pagar com Pix ou cartão"}: ${result.url}`
+    ? result.pixCode
+      ? `Oi! Segue o Pix do site (${formatBRL(amount)}). Pelo link você vê o QR code: ${result.url}\n\nOu cole este código no app do banco (Pix copia e cola):\n${result.pixCode}`
+      : `Oi! Segue o link para o pagamento do site (${formatBRL(amount)}). ${result.pix ? "É só abrir e pagar com o Pix (QR code ou copia e cola)" : "Dá pra pagar com Pix ou cartão"}: ${result.url}`
     : "";
+  // Com lead que tem WhatsApp, a mensagem já abre na conversa dele; sem, abre para escolher o contato
+  const clientWa = selectedLead?.whatsapp ?? null;
 
   return (
     <>
@@ -116,6 +130,28 @@ export function ChargeDialog({
           ) : result ? (
             <div className="grid gap-3">
               {result.isTest && <p className="rounded-md bg-demo-soft px-3 py-2 text-xs text-demo">Cobrança de teste: nenhum dinheiro real é movimentado.</p>}
+              {result.qr && (
+                <div
+                  className="mx-auto w-48 rounded-lg border bg-white p-2 [&>svg]:h-auto [&>svg]:w-full"
+                  role="img"
+                  aria-label="QR code do Pix"
+                  dangerouslySetInnerHTML={{ __html: result.qr }}
+                />
+              )}
+              {result.pixCode && (
+                <div className="flex gap-2">
+                  <Input readOnly value={result.pixCode} className="h-10 font-mono text-xs" onFocus={(e) => e.target.select()} aria-label="Pix copia e cola" />
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="size-10"
+                    aria-label="Copiar Pix copia e cola"
+                    onClick={() => navigator.clipboard.writeText(result.pixCode!).then(() => toast.success("Código Pix copiado"))}
+                  >
+                    <Copy />
+                  </Button>
+                </div>
+              )}
               <div className="flex gap-2">
                 <Input readOnly value={result.url} className="h-10 font-mono text-xs" onFocus={(e) => e.target.select()} aria-label="Link de pagamento" />
                 <Button
@@ -129,8 +165,8 @@ export function ChargeDialog({
                 </Button>
               </div>
               <Button asChild className="h-10 bg-whatsapp text-whatsapp-foreground hover:bg-whatsapp/90">
-                <a href={`https://wa.me/?text=${encodeURIComponent(waText)}`} target="_blank" rel="noopener noreferrer">
-                  <MessageCircle /> Enviar pelo WhatsApp
+                <a href={buildWhatsAppLink(clientWa, waText)} target="_blank" rel="noopener noreferrer">
+                  <MessageCircle /> {clientWa && selectedLead ? `Enviar para ${selectedLead.name.split(" ")[0]} no WhatsApp` : "Enviar pelo WhatsApp"}
                 </a>
               </Button>
               <Button asChild variant="outline" className="h-10">
@@ -209,7 +245,7 @@ export function ChargeDialog({
                   </div>
                 </div>
               )}
-              <fieldset className="grid gap-1.5">
+              <fieldset className={cn("grid gap-1.5", instantPix && "hidden")}>
                 <legend className="mb-1.5 text-sm font-medium">Formas de pagamento</legend>
                 <div className="flex flex-wrap gap-2">
                   {METHODS.filter((m) => current?.methods.includes(m.id)).map((m) => {
@@ -231,11 +267,39 @@ export function ChargeDialog({
                   })}
                 </div>
               </fieldset>
+              {provider === "mercadopago" && (
+                <div className="grid gap-1.5">
+                  <Label>Como o cliente paga</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { id: "qr" as const, icon: QrCode, title: "QR do Pix agora", hint: "Código na hora, aqui" },
+                      { id: "link" as const, icon: Link2, title: "Link de pagamento", hint: "Pix ou cartão" },
+                    ].map((o) => (
+                      <button
+                        key={o.id}
+                        type="button"
+                        onClick={() => setMpMode(o.id)}
+                        aria-pressed={mpMode === o.id}
+                        className={cn(
+                          "flex items-start gap-2 rounded-md border px-3 py-2 text-left text-sm transition-colors duration-150",
+                          mpMode === o.id ? "border-foreground ring-1 ring-foreground" : "hover:border-foreground/30",
+                        )}
+                      >
+                        <o.icon className="mt-0.5 size-4 shrink-0" aria-hidden />
+                        <span>
+                          <span className="block font-medium">{o.title}</span>
+                          <span className="block text-xs text-muted-foreground">{o.hint}</span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               {provider === "mock" && <p className="text-xs text-demo">Pagamentos de teste: o cliente vê botões de simulação, sem dinheiro de verdade.</p>}
               {current?.hint && <p className="text-xs text-muted-foreground">{current.hint}</p>}
               <DialogFooter>
                 <Button type="submit" className="h-10 w-full sm:w-auto" disabled={saving || amount < 500 || !provider}>
-                  {saving && <Loader2 className="animate-spin" />} Gerar link de {formatBRL(amount)}
+                  {saving && <Loader2 className="animate-spin" />} {instantPix ? `Gerar Pix de ${formatBRL(amount)}` : `Gerar link de ${formatBRL(amount)}`}
                 </Button>
               </DialogFooter>
             </form>

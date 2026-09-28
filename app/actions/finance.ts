@@ -10,6 +10,7 @@ import { deleteBankAccount, listBankAccounts, saveBankAccount, setDefaultBankAcc
 import { confirmPixCharge, createCharge, listAccounts, listPaymentProviders, recordManualSale } from "@/lib/payments/service";
 import type { ChargeProvider } from "@/lib/payments/types";
 import { appUrl } from "@/lib/prototypes/service";
+import { bestWhatsAppNumber } from "@/lib/whatsapp/phone";
 import { publish } from "@/lib/realtime";
 
 const cents = z.coerce
@@ -37,7 +38,16 @@ export const chargeDialogData = action({ schema: z.object({}), name: "chargeDial
   }
   return {
     providers: list,
-    leads: leads.map((l) => ({ id: l.id, name: l.name, city: l.city, dealValue: l.dealValue, isDemo: l.isDemo, prototypeId: l.prototypes[0]?.id ?? null })),
+    leads: leads.map((l) => ({
+      id: l.id,
+      name: l.name,
+      city: l.city,
+      dealValue: l.dealValue,
+      isDemo: l.isDemo,
+      prototypeId: l.prototypes[0]?.id ?? null,
+      // WhatsApp do cliente: o link de pagamento vai direto para a conversa dele (lead DEMO nunca)
+      whatsapp: l.isDemo ? null : (bestWhatsAppNumber(l)?.e164 ?? null),
+    })),
     defaultTicket: user.defaultTicket,
   };
 });
@@ -51,6 +61,7 @@ export const createChargeAction = action(
       methods: z.array(z.enum(["pix", "credit_card", "debit_card"])).min(1, "Escolha ao menos uma forma de pagamento."),
       leadId: idSchema.nullable().optional(),
       prototypeId: idSchema.nullable().optional(),
+      instantPix: z.boolean().optional(),
     }),
     limit: "payment",
     name: "createCharge",
@@ -58,7 +69,7 @@ export const createChargeAction = action(
   async (input, user) => {
     const charge = await createCharge(user.id, input);
     refresh();
-    return { id: charge.id, url: `${await appUrl()}/pagar/${charge.slug}`, isTest: charge.isTest, pix: charge.provider === "pix" };
+    return { id: charge.id, url: `${await appUrl()}/pagar/${charge.slug}`, isTest: charge.isTest, pix: charge.provider === "pix", pixCode: charge.pixCode, auto: charge.provider !== "pix" };
   },
 );
 

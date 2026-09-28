@@ -9,7 +9,7 @@ import type { Charge, PaymentAccount } from "@/lib/generated/prisma/client";
 import { randomSlug } from "@/lib/hash";
 import { logEvent } from "@/lib/leads/events";
 import { logger } from "@/lib/logger";
-import { mercadoPagoConfigured, mpCreateCheckout, mpRefresh } from "@/lib/payments/mercadopago";
+import { mercadoPagoConfigured, mpCreateCheckout, mpCreatePix, MpPixUnavailableError, mpRefresh } from "@/lib/payments/mercadopago";
 import { stripeConfigured, stripeCreateCheckout } from "@/lib/payments/stripe";
 import { pixAccountFor } from "@/lib/finance/banks";
 import { buildPixCode } from "@/lib/payments/pix";
@@ -118,8 +118,8 @@ async function checkoutUrls(slug: string): Promise<CheckoutUrls> {
 
 /** Gera (ou renova) a URL do checkout hospedado do provedor para uma cobrança. */
 export async function ensureCheckout(charge: Charge & { account: PaymentAccount | null }) {
-  // Pix direto não tem checkout: o código fica na própria página de pagamento
-  if (charge.status !== "PENDING" || charge.provider === "pix") return charge;
+  // Pix direto (e Pix na hora do MP) não têm checkout: o código fica na própria página de pagamento
+  if (charge.status !== "PENDING" || charge.provider === "pix" || charge.pixCode) return charge;
   const fresh = charge.checkoutUrl && (!charge.expiresAt || charge.expiresAt.getTime() - Date.now() > 10 * 60 * 1000);
   if (fresh) return charge;
 
@@ -159,6 +159,8 @@ type ChargeInput = {
   prototypeId?: string | null;
   /** Pix direto: qual conta (padrão: a principal com chave Pix) */
   bankAccountId?: string | null;
+  /** Mercado Pago: gera o Pix na hora (QR e copia e cola aqui) em vez do link do checkout */
+  instantPix?: boolean;
 };
 
 async function assertOwnLinks(userId: string, input: ChargeInput) {
@@ -216,6 +218,31 @@ export async function confirmPixCharge(userId: string, chargeId: string, paidAt?
   );
 }
 
+/** Pix na hora pelo Mercado Pago: o código vai para a cobrança e a página pública mostra o QR. */
+async function attachInstantPix(charge: Charge & { account: PaymentAccount | null }) {
+  if (!charge.account || charge.account.status !== "ACTIVE") throw new UserFacingError("A conta de recebimento dessa cobrança não está mais conectada.");
+  const base = await appUrl();
+  let pix;
+  try {
+    pix = await mpCreatePix(
+      await mpSecrets(charge.account),
+      { id: charge.id, slug: charge.slug, description: charge.description, amountCents: charge.amountCents, methods: ["pix"], feeCents: fee(charge.amountCents) },
+      { base, payerEmail: `pix-${charge.slug}@${new URL(base).host}` },
+    );
+  } catch (err) {
+    if (err instanceof MpPixUnavailableError) {
+      logger.warn("mercadopago: pix recusado", { err: err.message });
+      throw new UserFacingError("O Mercado Pago recusou o Pix nessa conta. Cadastre uma chave Pix no app do Mercado Pago (Pix → Minhas chaves) ou use o link com Pix e cartão.");
+    }
+    throw err;
+  }
+  return db.charge.update({
+    where: { id: charge.id },
+    data: { pixCode: pix.qrCode, externalPaymentId: pix.paymentId, externalId: pix.paymentId, methods: ["pix"], checkoutUrl: `${base}/pagar/${charge.slug}`, expiresAt: pix.expiresAt },
+    include: { account: true },
+  });
+}
+
 export async function createCharge(userId: string, input: ChargeInput) {
   if (input.provider === "pix") return createPixCharge(userId, input);
   const provider: PaymentProviderId = input.provider;
@@ -244,7 +271,7 @@ export async function createCharge(userId: string, input: ChargeInput) {
   });
 
   try {
-    const ready = await ensureCheckout(charge);
+    const ready = provider === "mercadopago" && input.instantPix ? await attachInstantPix(charge) : await ensureCheckout(charge);
     if (charge.leadId) await logEvent(userId, charge.leadId, "PAYMENT_LINK_CREATED", { chargeId: charge.id, amountCents: charge.amountCents });
     await publish({ type: "charge", userId, chargeId: charge.id, status: "PENDING" });
     return ready;

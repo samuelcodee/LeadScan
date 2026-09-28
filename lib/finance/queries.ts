@@ -129,7 +129,7 @@ export async function chargeableLeads(userId: string) {
     where: { userId, saved: true, status: { notIn: ["NOT_INTERESTED", "LOST"] } },
     orderBy: [{ updatedAt: "desc" }],
     take: 200,
-    select: { id: true, name: true, city: true, status: true, dealValue: true, isDemo: true, prototypes: { select: { id: true }, orderBy: { updatedAt: "desc" }, take: 1 } },
+    select: { id: true, name: true, city: true, status: true, dealValue: true, isDemo: true, phone: true, whatsapp: true, prototypes: { select: { id: true }, orderBy: { updatedAt: "desc" }, take: 1 } },
   });
 }
 

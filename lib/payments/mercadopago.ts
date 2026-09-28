@@ -114,6 +114,52 @@ export async function mpCreateCheckout(account: AccountSecrets, charge: ChargeFo
 }
 
 /**
+ * Pix na hora: cria o pagamento Pix direto na API (POST /v1/payments) com o token do vendedor.
+ * Volta o "copia e cola" (o QR é desenhado a partir dele), sem passar pela página do MP.
+ * A confirmação é a mesma do checkout: webhook "payment" + external_reference = id da cobrança.
+ * O MP exige e-mail do pagador; sem o do cliente, usamos um endereço técnico da cobrança
+ * (o pagador real é quem ler o QR no app do banco).
+ * https://www.mercadopago.com.br/developers/pt/reference/payments/_payments/post
+ */
+export async function mpCreatePix(
+  account: AccountSecrets,
+  charge: ChargeForCheckout,
+  opts: { base: string; payerEmail: string; hours?: number },
+): Promise<{ paymentId: string; qrCode: string; expiresAt: Date }> {
+  if (!account.accessToken) throw new Error("Conta Mercado Pago sem token.");
+  const expiresAt = new Date(Date.now() + (opts.hours ?? 72) * 60 * 60 * 1000);
+  const res = await fetch(`${API}/v1/payments`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${account.accessToken}`, "Content-Type": "application/json", "X-Idempotency-Key": `pix-${charge.id}` },
+    body: JSON.stringify({
+      transaction_amount: charge.amountCents / 100,
+      description: charge.description.slice(0, 250),
+      payment_method_id: "pix",
+      payer: { email: opts.payerEmail },
+      external_reference: charge.id,
+      notification_url: `${opts.base}/api/webhooks/mercadopago`,
+      date_of_expiration: expiresAt.toISOString().replace("Z", "+00:00"),
+      ...(charge.feeCents > 0 ? { application_fee: charge.feeCents / 100 } : {}),
+      metadata: { charge_id: charge.id },
+    }),
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (res.status === 401) throw new Error("MP_UNAUTHORIZED");
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    // Conta sem chave Pix no Mercado Pago é o caso mais comum: o MP recusa o meio "pix"
+    if (/pix|bank_transfer|payment_method|collector/i.test(detail)) throw new MpPixUnavailableError(detail.slice(0, 300));
+    throw new Error(`Mercado Pago respondeu ${res.status} ao criar o Pix: ${detail.slice(0, 300)}`);
+  }
+  const p = (await res.json()) as { id: number; point_of_interaction?: { transaction_data?: { qr_code?: string } } };
+  const qrCode = p.point_of_interaction?.transaction_data?.qr_code;
+  if (!qrCode) throw new Error("Mercado Pago não devolveu o código Pix.");
+  return { paymentId: String(p.id), qrCode, expiresAt };
+}
+
+export class MpPixUnavailableError extends Error {}
+
+/**
  * Valida a assinatura do webhook. Manifesto documentado pelo MP:
  *   id:[data.id];request-id:[x-request-id];ts:[ts];   (partes ausentes são omitidas)
  * https://www.mercadopago.com.br/developers/pt/docs/your-integrations/notifications/webhooks
