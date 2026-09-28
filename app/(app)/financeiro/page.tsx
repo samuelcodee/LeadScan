@@ -205,6 +205,9 @@ export default async function FinancePage(props: PageProps<"/financeiro">) {
 const CONNECT_ERRORS: Record<string, string> = {
   "mercadopago-credenciais": "O Mercado Pago recusou as credenciais da plataforma. Confira na Vercel se MP_CLIENT_ID e MP_CLIENT_SECRET são os de PRODUÇÃO, sem espaços, e faça o redeploy.",
   "mercadopago-redirect": "A Redirect URL cadastrada na aplicação do Mercado Pago não confere com o endereço do site. Ela precisa ser exatamente https://leadscanbr.vercel.app/api/payments/connect/mercadopago/callback.",
+  "mercadopago-rede": "O Mercado Pago não respondeu a tempo. Clique em Conectar de novo em instantes.",
+  "mercadopago-salvar": "O Mercado Pago autorizou, mas não conseguimos guardar a conexão. Confira na Vercel a variável ENCRYPTION_KEY e tente de novo.",
+  "mercadopago-outro": "O Mercado Pago respondeu de um jeito inesperado. Tente de novo; se repetir, avise o suporte.",
   "mercadopago-codigo": "A autorização do Mercado Pago expirou antes de voltar. Clique em Conectar de novo.",
   "mercadopago-estado": "A conexão demorou demais ou foi aberta em outra aba. Clique em Conectar de novo nesta mesma aba.",
   "mercadopago-recusado": "A autorização foi cancelada na tela do Mercado Pago. Clique em Conectar e autorize para receber por lá.",

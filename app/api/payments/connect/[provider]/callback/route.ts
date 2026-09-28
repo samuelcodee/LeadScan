@@ -30,19 +30,35 @@ export async function GET(request: NextRequest, ctx: RouteContext<"/api/payments
       const saved = await unsignValue(request.cookies.get(STATE_COOKIE)?.value);
       const [uid, nonce] = saved?.split(":") ?? [];
       if (!code || !nonce || uid !== user.id || !safeEqual(state, nonce)) return back("erro=mercadopago-estado");
-      const t = await mpExchangeCode(code, `${await appUrl()}/api/payments/connect/mercadopago/callback`);
-      // A mesma conta MP não pode receber por dois usuários da plataforma
-      const owner = await db.paymentAccount.findFirst({ where: { provider: "mercadopago", externalId: String(t.user_id), NOT: { userId: user.id } } });
-      if (owner) return back("erro=mercadopago-em-uso");
-      await saveAccount(user.id, "mercadopago", {
-        status: "ACTIVE",
-        externalId: String(t.user_id),
-        accessToken: t.access_token,
-        refreshToken: t.refresh_token,
-        publicKey: t.public_key,
-        livemode: t.live_mode ?? true,
-        expiresInSec: t.expires_in,
-      });
+      // Cada etapa com o próprio código de erro: a tela diz onde parou (e o log guarda o detalhe)
+      let t;
+      try {
+        t = await mpExchangeCode(code, `${await appUrl()}/api/payments/connect/mercadopago/callback`);
+      } catch (err) {
+        logger.error("mercadopago: troca do código falhou", { err: String(err) });
+        return back(`erro=mercadopago-${err instanceof MpOAuthError ? err.cause : "rede"}`);
+      }
+      if (!t?.access_token) {
+        logger.error("mercadopago: resposta sem token", { keys: Object.keys(t ?? {}) });
+        return back("erro=mercadopago-outro");
+      }
+      try {
+        // A mesma conta MP não pode receber por dois usuários da plataforma
+        const owner = await db.paymentAccount.findFirst({ where: { provider: "mercadopago", externalId: String(t.user_id), NOT: { userId: user.id } } });
+        if (owner) return back("erro=mercadopago-em-uso");
+        await saveAccount(user.id, "mercadopago", {
+          status: "ACTIVE",
+          externalId: String(t.user_id),
+          accessToken: t.access_token,
+          refreshToken: t.refresh_token,
+          publicKey: t.public_key,
+          livemode: t.live_mode ?? true,
+          expiresInSec: t.expires_in,
+        });
+      } catch (err) {
+        logger.error("mercadopago: salvar a conta falhou", { err: String(err) });
+        return back("erro=mercadopago-salvar");
+      }
       return back("conectado=mercadopago");
     }
 
