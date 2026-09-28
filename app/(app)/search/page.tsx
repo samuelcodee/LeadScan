@@ -1,22 +1,45 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { cookies } from "next/headers";
+import { notFound, redirect } from "next/navigation";
+import { after } from "next/server";
 import { Clock } from "lucide-react";
+import { CloseSearchButton } from "@/components/search/close-search";
 import { NextBatch } from "@/components/search/next-batch";
 import { ResultsView } from "@/components/search/results-view";
 import { SearchForm } from "@/components/search/search-form";
 import type { SearchInput } from "@/components/search/use-search-runner";
 import { isAIEnabled } from "@/lib/ai";
 import { requireUser } from "@/lib/auth/session";
-import { filtersFromParams, searchRequestSchema } from "@/lib/domain/search";
+import { DEFAULT_FILTERS, filtersFromParams, searchRequestSchema } from "@/lib/domain/search";
+import { SEARCH_VIEW_COOKIE } from "@/lib/domain/filters";
 import { formatInt, formatRelative } from "@/lib/format";
-import { getSearchResults, recentSearches } from "@/lib/leads/queries";
+import { getSearchResults, markSearchOpened, openSearchId, recentSearches } from "@/lib/leads/queries";
 import { sweepStatus } from "@/lib/leads/search";
 import { defaultProviderId, listProviders } from "@/lib/providers";
 
 export const metadata: Metadata = { title: "Buscar leads" };
 // Buscas em lote rodam pela server action desta página (e pelo after() da fila)
 export const maxDuration = 300;
+
+const VIEW_KEYS = ["lead", ...Object.keys(DEFAULT_FILTERS)];
+
+/** Endereço da busca aberta com a vista guardada no cookie (filtros e lead selecionado), se for dela. */
+function openSearchHref(id: string, saved: string | undefined) {
+  const qs = new URLSearchParams({ s: id });
+  try {
+    const view = new URLSearchParams(decodeURIComponent(saved ?? ""));
+    if (view.get("s") === id) {
+      for (const k of VIEW_KEYS) {
+        const v = view.get(k);
+        if (v) qs.set(k, v.slice(0, 64));
+      }
+    }
+  } catch {
+    // cookie estranho: abre a busca sem filtros
+  }
+  return `/search?${qs}`;
+}
 
 export default async function SearchPage(props: PageProps<"/search">) {
   const user = await requireUser();
@@ -35,6 +58,12 @@ export default async function SearchPage(props: PageProps<"/search">) {
   );
 
   if (!searchId) {
+    // A busca aberta não some ao trocar de aba: "Buscar leads" volta nela (com filtros e lead
+    // selecionado) até a pessoa tocar em "Fechar busca". ?nova=1 ou ?q= abrem o formulário.
+    if (!one(sp.q) && !one(sp.nova)) {
+      const open = await openSearchId(user.id);
+      if (open) redirect(openSearchHref(open, (await cookies()).get(SEARCH_VIEW_COOKIE)?.value));
+    }
     const recent = await recentSearches(user.id);
     return (
       <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 sm:py-16">
@@ -69,6 +98,9 @@ export default async function SearchPage(props: PageProps<"/search">) {
 
   const result = await getSearchResults(user.id, searchId);
   if (!result) notFound();
+  // Esta vira a busca aberta (depois da resposta: não atrasa a tela)
+  const userId = user.id;
+  after(() => markSearchOpened(userId, result.search.id));
   const providerLabel = providers.find((p) => p.id === result.search.provider)?.label ?? result.search.provider;
   // Mesma busca de novo = próxima leva da varredura (buscas antigas com parâmetros diferentes ficam sem o botão)
   const again = searchRequestSchema.safeParse(result.search.params);
@@ -86,11 +118,14 @@ export default async function SearchPage(props: PageProps<"/search">) {
   return (
     <div>
       <div className="border-b px-4 py-4 sm:px-6">
-        <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-          <h1 className="text-lg font-semibold tracking-tight">{result.search.query}</h1>
-          <p className="text-xs text-muted-foreground">
-            {formatInt(result.search.resultCount)} encontrados · fonte {providerLabel} · {formatRelative(result.search.createdAt)}
-          </p>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+          <h1 className="min-w-0 text-lg font-semibold tracking-tight">{result.search.query}</h1>
+          <div className="flex items-center gap-3">
+            <p className="text-xs text-muted-foreground">
+              {formatInt(result.search.resultCount)} encontrados · fonte {providerLabel} · {formatRelative(result.search.createdAt)}
+            </p>
+            <CloseSearchButton id={result.search.id} />
+          </div>
         </div>
         {result.search.error && <p className="mb-3 rounded-md bg-warning-soft px-3 py-2 text-sm text-warning">{result.search.error}</p>}
         {nextBatch}

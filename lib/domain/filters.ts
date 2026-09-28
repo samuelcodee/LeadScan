@@ -52,6 +52,18 @@ export function activeFilterCount(f: SearchFilters) {
 }
 
 /** Filtros ↔ querystring (links compartilháveis, voltar/avançar do navegador funciona). */
+/** Cookie com a vista da busca aberta (s, lead, filtros): "Buscar leads" volta exatamente nela. */
+export const SEARCH_VIEW_COOKIE = "ls_busca";
+
+/** Guarda a vista atual (query string da tela de resultados) por 30 dias. */
+export function rememberSearchView(query: string) {
+  try {
+    document.cookie = `${SEARCH_VIEW_COOKIE}=${encodeURIComponent(query)}; path=/; max-age=2592000; samesite=lax`;
+  } catch {
+    // navegador sem cookies: a busca volta sem os filtros, só isso
+  }
+}
+
 export function filtersToParams(f: SearchFilters, params = new URLSearchParams()) {
   for (const k of Object.keys(DEFAULT_FILTERS) as (keyof SearchFilters)[]) {
     if (f[k] !== DEFAULT_FILTERS[k]) params.set(k, String(f[k]));

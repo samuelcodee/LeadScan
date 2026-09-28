@@ -388,8 +388,13 @@ model Search {
   /// Muda a cada cidade processada: busca "RUNNING" parada há 2 min é retomada por outra instância
   updatedAt   DateTime  @default(now()) @updatedAt
   finishedAt  DateTime?
+  /// Última vez que a pessoa abriu os resultados: "Buscar leads" volta para a busca aberta mais recente
+  openedAt    DateTime  @default(now())
+  /// "Fechar busca": sai da tela (continua em Buscas recentes; abrir de novo reabre)
+  closedAt    DateTime?
 
   @@index([userId, createdAt(sort: Desc)])
+  @@index([userId, openedAt(sort: Desc)])
 }
 
 /// Cache de respostas das fontes de dados (evita chamadas repetidas).

@@ -29,6 +29,11 @@ export const startSearch = action({ name: "startSearch", schema: searchRequestSc
   return { searchId: search.id, status: "QUEUED" as const, error: null };
 });
 
+/** "Fechar busca": sai da tela de resultados (a busca continua em Buscas recentes). */
+export const closeSearch = action({ name: "closeSearch", schema: z.object({ id: idSchema }) }, async ({ id }, user) => {
+  await db.search.updateMany({ where: { id, userId: user.id }, data: { closedAt: new Date() } });
+});
+
 export const getSearchStatus = action(
   { name: "getSearchStatus", schema: z.object({ id: idSchema }), limit: "searchStatus" },
   async ({ id }, user) => {

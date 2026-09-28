@@ -62,6 +62,21 @@ export async function getSearchResults(userId: string, searchId: string) {
   };
 }
 
+/** A busca que continua aberta (a última que a pessoa abriu e não fechou): "Buscar leads" volta nela. */
+export async function openSearchId(userId: string) {
+  const last = await db.search.findFirst({
+    where: { userId },
+    orderBy: [{ openedAt: "desc" }, { createdAt: "desc" }],
+    select: { id: true, closedAt: true },
+  });
+  return last && !last.closedAt ? last.id : null;
+}
+
+/** Abriu os resultados: esta passa a ser a busca aberta (e reabre se tinha sido fechada). */
+export async function markSearchOpened(userId: string, id: string) {
+  await db.search.updateMany({ where: { id, userId }, data: { openedAt: new Date(), closedAt: null } });
+}
+
 export async function recentSearches(userId: string, take = 6) {
   return db.search.findMany({
     where: { userId },

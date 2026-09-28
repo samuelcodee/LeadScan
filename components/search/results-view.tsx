@@ -2,7 +2,7 @@
 
 import { BookmarkPlus, Filter, SearchX } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { saveMany } from "@/app/actions/leads";
 import { createPrototypeAction } from "@/app/actions/prototypes";
@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { activeFilterCount, DEFAULT_FILTERS, filtersToParams, matchesFilters, type SearchFilters } from "@/lib/domain/filters";
+import { activeFilterCount, DEFAULT_FILTERS, filtersToParams, matchesFilters, rememberSearchView, type SearchFilters } from "@/lib/domain/filters";
 import { formatInt } from "@/lib/format";
 import type { LeadListItem } from "@/lib/leads/queries";
 import { useMediaQuery } from "@/hooks/use-media-query";
@@ -66,7 +66,12 @@ export function ResultsView({
     if (lead) p.set("lead", lead);
     else p.delete("lead");
     window.history.replaceState(null, "", `?${p.toString()}`);
+    rememberSearchView(p.toString());
   };
+  // Vista guardada: sair para outra aba e voltar em "Buscar leads" reabre com os mesmos filtros e lead
+  useEffect(() => {
+    rememberSearchView(window.location.search.slice(1));
+  }, []);
 
   const setFilter = <K extends keyof SearchFilters>(k: K, v: SearchFilters[K]) => {
     const next = { ...filters, [k]: v };
