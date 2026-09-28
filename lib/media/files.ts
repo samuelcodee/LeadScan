@@ -1,6 +1,7 @@
 import "server-only";
 import { UserFacingError } from "@/lib/action";
 import { db } from "@/lib/db";
+import { env } from "@/lib/env";
 import type { MediaKind } from "@/lib/generated/prisma/client";
 
 /**
@@ -10,7 +11,8 @@ import type { MediaKind } from "@/lib/generated/prisma/client";
  * Cada conta tem uma cota de espaço; imagens geradas por IA também aparecem aqui.
  */
 export const FILE_KINDS: MediaKind[] = ["SITE_IMAGE", "AI_IMAGE", "FILE_VIDEO", "FILE_AUDIO"];
-export const STORAGE_QUOTA_BYTES = 300 * 1024 * 1024;
+/** Cota por conta (STORAGE_USER_MB, padrão 60 MB). */
+export const storageQuotaBytes = () => env().STORAGE_USER_MB * 1024 * 1024;
 
 export type FileFilter = "todos" | "fotos" | "videos" | "audios";
 const BY_FILTER: Record<FileFilter, MediaKind[]> = {
@@ -35,14 +37,14 @@ export async function storageUsage(userId: string) {
   const rows = await db.media.groupBy({ by: ["kind"], where: { userId, kind: { in: FILE_KINDS } }, _sum: { size: true }, _count: true });
   const used = rows.reduce((s, r) => s + (r._sum.size ?? 0), 0);
   const count = (kinds: MediaKind[]) => rows.filter((r) => kinds.includes(r.kind)).reduce((s, r) => s + r._count, 0);
-  return { used, quota: STORAGE_QUOTA_BYTES, photos: count(BY_FILTER.fotos), videos: count(BY_FILTER.videos), audios: count(BY_FILTER.audios) };
+  return { used, quota: storageQuotaBytes(), photos: count(BY_FILTER.fotos), videos: count(BY_FILTER.videos), audios: count(BY_FILTER.audios) };
 }
 
 /** Antes de gravar: cabe na cota? */
 export async function assertQuota(userId: string, incoming: number) {
   const { used } = await storageUsage(userId);
-  if (used + incoming > STORAGE_QUOTA_BYTES) {
-    throw new UserFacingError("Seu espaço de arquivos acabou (300 MB). Apague vídeos ou fotos que não usa mais.");
+  if (used + incoming > storageQuotaBytes()) {
+    throw new UserFacingError(`Seu espaço de arquivos acabou (${env().STORAGE_USER_MB} MB). Apague vídeos ou fotos que não usa mais.`);
   }
 }
 

@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import type { MediaKind } from "@/lib/generated/prisma/client";
 import { moderateImage, ModerationUnavailableError } from "@/lib/media/moderation";
 import { sniffAv } from "@/lib/media/sniff";
+import { assertPlatformSpace } from "@/lib/media/space";
 
 /**
  * Upload de imagens: valida pelo conteúdo (não pela extensão), redimensiona, converte
@@ -56,6 +57,7 @@ export async function saveImage(opts: { userId: string; kind: ImageKind; input: 
     throw err;
   }
   if (verdict.status === "REJECTED") throw new UserFacingError(verdict.note ?? "Imagem recusada pela moderação.");
+  await assertPlatformSpace(data.byteLength);
 
   return db.media.create({
     data: {
@@ -115,6 +117,7 @@ export async function saveChatAv(opts: { userId: string; kind: AvKind; input: Bu
   if (opts.input.byteLength > max) throw tooBig(opts.kind);
   const mime = sniffAv(opts.input, video ? "video" : "audio");
   if (!mime) throw new UserFacingError(video ? "Formato de vídeo não aceito. Envie MP4, MOV ou WebM." : "Formato de áudio não aceito.");
+  await assertPlatformSpace(opts.input.byteLength);
   return db.media.create({
     data: {
       userId: opts.userId,
@@ -152,6 +155,8 @@ export async function appendPart(opts: { userId: string; kind: AvKind; part: Buf
     const mime = sniffAv(opts.part, isVideo(opts.kind) ? "video" : "audio");
     if (!mime) throw new UserFacingError(isVideo(opts.kind) ? "Formato de vídeo não aceito. Envie MP4, MOV ou WebM." : "Formato de áudio não aceito.");
     await db.media.deleteMany({ where: { userId: opts.userId, source: "partial", createdAt: { lt: new Date(Date.now() - 60 * 60_000) } } });
+    // O arquivo inteiro precisa caber no espaço da plataforma, não só a primeira parte
+    await assertPlatformSpace(opts.total);
     const media = await db.media.create({
       data: {
         userId: opts.userId,

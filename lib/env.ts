@@ -45,6 +45,10 @@ const schema = z.object({
   MAPS_API_KEY: z.string().default(""),
   /** Teto de requisições ao Google por mês (padrão 900, abaixo das 1.000 grátis). Chegou nele, a busca usa o OpenStreetMap. */
   GOOGLE_MAPS_MONTHLY_LIMIT: z.coerce.number().int().min(0).max(1_000_000).default(900),
+  // Espaço de arquivos (fotos, vídeos, áudios, chat) — ficam no Postgres. Padrões pensados para o
+  // plano grátis da Neon (0,5 GB no total): por conta e teto da plataforma inteira.
+  STORAGE_USER_MB: z.coerce.number().int().min(5).max(100_000).default(60),
+  STORAGE_TOTAL_MB: z.coerce.number().int().min(50).max(10_000_000).default(350),
   /** Fotos do Google têm cota própria e são cobradas por foto: desligadas se não for "true". */
   GOOGLE_MAPS_PHOTOS: bool,
   OVERPASS_URL: z.string().url().default("https://overpass-api.de/api/interpreter"),
