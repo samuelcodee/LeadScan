@@ -86,7 +86,7 @@ export function LeadCard({
   return (
     <article
       className={cn(
-        "group rounded-lg border bg-card shadow-soft transition-[border-color,box-shadow,transform] duration-200",
+        "group cv-auto rounded-lg border bg-card shadow-soft transition-[border-color,box-shadow,transform] duration-200 [--cv-h:330px]",
         // selecionado: contorno preto + fio lima na borda esquerda; hover: leve elevação
         selected ? "border-foreground/50 shadow-premium [box-shadow:inset_3px_0_0_var(--color-lime),var(--shadow-premium)]" : "hover:border-foreground/20 hover:shadow-premium motion-safe:hover:-translate-y-px",
       )}

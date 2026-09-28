@@ -51,7 +51,7 @@ export function Topbar({ isDemo, footer }: { isDemo: boolean; footer: React.Reac
   }, []);
 
   return (
-    <header className="sticky top-0 z-40 border-b bg-card/95 backdrop-blur-sm">
+    <header className="sticky top-0 z-40 border-b bg-card">
       <div className="flex h-14 items-center gap-2 px-3 sm:px-5">
         <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setMenu(true)} aria-label="Abrir menu">
           <Menu />

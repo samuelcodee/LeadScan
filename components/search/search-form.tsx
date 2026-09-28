@@ -58,6 +58,11 @@ export function SearchForm({
   const [advanced, setAdvanced] = useState(!compact);
   const { run, progress, pending } = useSearchRunner();
   const parsedOnce = useRef(false);
+  // Cursor já no campo só com mouse: no celular o teclado subia sozinho e cobria metade da tela
+  const queryInput = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (!compact && window.matchMedia("(pointer: fine)").matches) queryInput.current?.focus({ preventScroll: true });
+  }, [compact]);
   // Municípios do IBGE da UF escolhida (buscados sob demanda; o bundle não carrega os 5.571)
   const [ufList, setUfList] = useState<{ uf: string; cities: string[] }>({ uf: "", cities: [] });
 
@@ -176,7 +181,7 @@ export function SearchForm({
             placeholder="O que você procura? Ex.: clínicas de estética em Fortaleza sem site"
             className="h-[52px] rounded-[10px] pl-10 text-base"
             autoComplete="off"
-            autoFocus={!compact}
+            ref={queryInput}
           />
         </div>
         <Button type="submit" size="lg" className="h-[52px] rounded-[10px] px-6 text-sm" disabled={pending}>
@@ -327,21 +332,38 @@ function Chip({ children, onRemove }: { children: React.ReactNode; onRemove?: ()
   );
 }
 
+/**
+ * Listas de escolha no celular: o teclado não abre sozinho (cobria a lista inteira), o campo
+ * sobe para o topo da tela antes de abrir (sobra altura para rolar com o dedo) e a lista cabe
+ * entre a barra de cima e a de baixo. No mouse nada muda: o filtro já vem com o cursor.
+ */
+const isCoarse = () => window.matchMedia("(pointer: coarse)").matches;
+const PICKER_CONTENT = {
+  collisionPadding: { top: 64, bottom: 76 },
+  onOpenAutoFocus: (e: Event) => {
+    if (isCoarse()) e.preventDefault();
+  },
+};
+const PICKER_LIST = "max-h-[min(18rem,calc(var(--radix-popover-content-available-height,20rem)_-_3.25rem))]";
+function liftOnTouch(e: React.MouseEvent<HTMLElement>) {
+  if (isCoarse()) e.currentTarget.scrollIntoView({ block: "start" });
+}
+
 function CategoryPicker({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
   const [open, setOpen] = useState(false);
   const label = value.length === 0 ? "Escolher…" : value.length === 1 ? getCategory(value[0]).plural : `${value.length} categorias`;
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" className="h-9 w-full justify-between font-normal" role="combobox" aria-expanded={open}>
+        <Button variant="outline" className="h-9 w-full scroll-mt-20 justify-between font-normal" role="combobox" aria-expanded={open} onClick={liftOnTouch}>
           <span className="truncate">{label}</span>
           <ChevronDown className="opacity-60" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-72 p-0" align="start">
+      <PopoverContent className="w-72 p-0" align="start" {...PICKER_CONTENT}>
         <Command>
           <CommandInput placeholder="Filtrar categorias…" />
-          <CommandList>
+          <CommandList className={PICKER_LIST}>
             <CommandEmpty>Nenhuma categoria.</CommandEmpty>
             <CommandGroup>
               {CATEGORIES.map((c) => {
@@ -431,12 +453,12 @@ function CityPicker({
       }}
     >
       <PopoverTrigger asChild>
-        <Button variant="outline" className="h-9 w-full justify-between font-normal" role="combobox" aria-expanded={open} aria-label="Cidades">
+        <Button variant="outline" className="h-9 w-full scroll-mt-20 justify-between font-normal" role="combobox" aria-expanded={open} aria-label="Cidades" onClick={liftOnTouch}>
           <span className={cn("truncate", value.length === 0 && "text-muted-foreground")}>{label}</span>
           <ChevronDown className="opacity-60" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[min(20rem,calc(100vw-2rem))] p-0" align="start">
+      <PopoverContent className="w-[min(20rem,calc(100vw-2rem))] p-0" align="start" {...PICKER_CONTENT}>
         <Command shouldFilter={false}>
           <CommandInput
             value={query}
@@ -450,7 +472,7 @@ function CityPicker({
               }
             }}
           />
-          <CommandList>
+          <CommandList className={PICKER_LIST}>
             <CommandGroup>
               <CommandItem
                 value="__all"

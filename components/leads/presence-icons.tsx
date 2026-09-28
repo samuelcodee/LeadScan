@@ -70,7 +70,7 @@ export function PresenceIcons({ lead, className, withFacebook }: { lead: LinkLea
             aria-label={i.label}
             title={i.label}
             className={cn(
-              "grid size-8 place-items-center rounded-md transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&_svg]:size-4",
+              "grid size-8 place-items-center rounded-md transition-colors pointer-coarse:size-9 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&_svg]:size-4",
               i.tone === "on" ? "text-foreground" : "text-muted-foreground/70",
               i.key === "wa" && i.tone === "on" && "hover:text-success",
             )}
@@ -78,7 +78,7 @@ export function PresenceIcons({ lead, className, withFacebook }: { lead: LinkLea
             {i.icon}
           </a>
         ) : (
-          <span key={i.key} title={i.label} className="grid size-8 place-items-center text-muted-foreground/30 [&_svg]:size-4">
+          <span key={i.key} title={i.label} className="grid size-8 place-items-center pointer-coarse:size-9 text-muted-foreground/30 [&_svg]:size-4">
             {i.icon}
             <span className="sr-only">{i.label}</span>
           </span>

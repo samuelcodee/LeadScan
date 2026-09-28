@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { setStatus } from "@/app/actions/leads";
 import { DemoBadge } from "@/components/common/page-header";
 import { StatusDot, WhatsAppButton } from "@/components/leads/lead-actions";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { ScoreBadge } from "@/components/leads/score";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
@@ -144,6 +145,9 @@ export function PipelineBoard({ leads: initial, defaultTicket }: { leads: BoardL
   const { scroller, startEdgeScroll, handlers } = useBoardScroll();
   const stopEdge = useRef<(() => void) | null>(null);
   const [visible, setVisible] = useState<Set<ColumnKey>>(() => new Set());
+  // Arrastar card só com mouse. No toque, um card "arrastável" disputa o gesto com a rolagem
+  // (segurar o dedo começa um arrasto em vez de rolar); lá o seletor de etapa move o card.
+  const canDrag = useMediaQuery("(pointer: fine)");
 
   // Quais colunas estão à vista (os atalhos do topo acendem)
   useEffect(() => {
@@ -212,7 +216,7 @@ export function PipelineBoard({ leads: initial, defaultTicket }: { leads: BoardL
   const card = (l: BoardLead) => (
     <article
       key={l.id}
-      draggable
+      draggable={canDrag}
       onDragStart={(e) => {
         setDragId(l.id);
         e.dataTransfer.effectAllowed = "move";
@@ -225,7 +229,11 @@ export function PipelineBoard({ leads: initial, defaultTicket }: { leads: BoardL
         stopEdge.current?.();
         stopEdge.current = null;
       }}
-      className={cn("group relative cursor-grab rounded-md border bg-card p-3 transition-[opacity,border-color] duration-150 hover:border-foreground/25 active:cursor-grabbing", dragId === l.id && "opacity-40")}
+      className={cn(
+        "group relative rounded-md border bg-card p-3 transition-[opacity,border-color] duration-150 hover:border-foreground/25",
+        canDrag && "cursor-grab active:cursor-grabbing",
+        dragId === l.id && "opacity-40",
+      )}
     >
       <div className="flex items-start justify-between gap-2">
         <Link href={`/leads/${l.id}`} className="min-w-0 text-sm font-medium leading-snug after:absolute after:inset-0">
@@ -242,7 +250,7 @@ export function PipelineBoard({ leads: initial, defaultTicket }: { leads: BoardL
         <div className="ml-auto flex items-center gap-1">
           {/* No toque não há arrastar: o seletor move o card */}
           <Select value={l.status} onValueChange={(v) => move(l.id, v as LeadStatus)}>
-            <SelectTrigger size="sm" className="h-7 w-7 justify-center border-transparent px-0 shadow-none [&>svg:last-child]:hidden md:hidden" aria-label="Mover para etapa">
+            <SelectTrigger size="sm" className="size-7 justify-center border-transparent px-0 shadow-none pointer-coarse:size-9 [&>svg:last-child]:hidden md:hidden" aria-label="Mover para etapa">
               <StatusDot status={l.status} />
             </SelectTrigger>
             <SelectContent align="end">
@@ -276,7 +284,7 @@ export function PipelineBoard({ leads: initial, defaultTicket }: { leads: BoardL
               onClick={() => goTo(key)}
               aria-current={visible.has(key) ? "true" : undefined}
               className={cn(
-                "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground",
+                "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground pointer-coarse:py-2",
                 visible.has(key) && "border-foreground/30 bg-card text-foreground shadow-soft",
               )}
             >
@@ -300,7 +308,7 @@ export function PipelineBoard({ leads: initial, defaultTicket }: { leads: BoardL
     <div
       ref={scroller}
       {...handlers}
-      className="flex cursor-grab snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain pb-4 data-[panning]:cursor-grabbing data-[panning]:select-none md:snap-none"
+      className="flex snap-x snap-proximity gap-3 overflow-x-auto overscroll-x-contain pb-4 pointer-fine:cursor-grab data-[panning]:cursor-grabbing data-[panning]:select-none md:snap-none"
     >
       {PIPELINE_COLUMNS.map((status) => {
         const items = leads.filter((l) => l.status === status).sort((a, b) => b.score - a.score);

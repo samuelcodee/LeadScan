@@ -53,7 +53,7 @@ export default async function PrototypesPage(props: PageProps<"/prototypes">) {
             : "Sites montados para os seus leads."
         }
       />
-      <nav className="mt-6 flex gap-1 overflow-x-auto border-b [scrollbar-width:none]" aria-label="Seções de protótipos">
+      <nav className="mt-6 flex overflow-x-auto border-b [scrollbar-width:none] sm:gap-1" aria-label="Seções de protótipos">
         {[
           { href: "/prototypes", label: "Seus protótipos", active: !showTemplates && !onlyFavorites },
           { href: "/prototypes?tab=favoritos", label: `Favoritos (${favoriteCount})`, active: onlyFavorites },
@@ -63,7 +63,7 @@ export default async function PrototypesPage(props: PageProps<"/prototypes">) {
             key={t.href}
             href={t.href}
             aria-current={t.active ? "page" : undefined}
-            className={`-mb-px shrink-0 border-b-2 px-3 py-2 text-sm font-medium transition-colors duration-150 ${t.active ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+            className={`-mb-px shrink-0 border-b-2 px-2 py-2.5 text-sm font-medium transition-colors duration-150 sm:px-3 sm:py-2 ${t.active ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
           >
             {"wide" in t && t.wide ? (
               <>
@@ -87,7 +87,7 @@ export default async function PrototypesPage(props: PageProps<"/prototypes">) {
             return (
               <li
                 key={t.id}
-                className="group relative overflow-hidden rounded-lg border bg-card shadow-soft transition-[border-color,box-shadow,transform] duration-200 hover:border-foreground/25 hover:shadow-premium motion-safe:hover:-translate-y-px"
+                className="group relative cv-auto overflow-hidden rounded-lg border bg-card shadow-soft transition-[border-color,box-shadow,transform] duration-200 [--cv-h:300px] hover:border-foreground/25 hover:shadow-premium motion-safe:hover:-translate-y-px"
               >
                 <div className="relative">
                   <ScaledSite spec={previewSpec(spec)} />
@@ -135,7 +135,7 @@ export default async function PrototypesPage(props: PageProps<"/prototypes">) {
       ) : (
         <ul className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {prototypes.map((p) => (
-            <li key={p.id} className="group relative overflow-hidden rounded-lg border bg-card shadow-soft transition-[border-color,box-shadow,transform] duration-200 hover:border-foreground/25 hover:shadow-premium motion-safe:hover:-translate-y-px">
+            <li key={p.id} className="group relative cv-auto overflow-hidden rounded-lg border bg-card shadow-soft transition-[border-color,box-shadow,transform] duration-200 [--cv-h:300px] hover:border-foreground/25 hover:shadow-premium motion-safe:hover:-translate-y-px">
               <ScaledSite spec={previewSpec(parseSpec(p.spec))} />
               <div className="border-t p-4">
                 <div className="flex items-center gap-2">

@@ -13,7 +13,7 @@ export const metadata: Metadata = { title: "Amigos" };
 
 const TABS = [
   { id: "amigos", label: "Amigos" },
-  { id: "convites", label: "Convites recebidos" },
+  { id: "convites", label: "Convites recebidos", short: "Convites" },
   { id: "enviados", label: "Enviados" },
   { id: "bloqueados", label: "Bloqueados" },
 ] as const;
@@ -38,7 +38,7 @@ export default async function FriendsPage(props: PageProps<"/amigos">) {
         <PeopleSearch />
       </div>
 
-      <nav className="mt-8 flex gap-1 overflow-x-auto border-b [scrollbar-width:none]" aria-label="Listas de amigos">
+      <nav className="mt-8 flex overflow-x-auto border-b [scrollbar-width:none] sm:gap-1" aria-label="Listas de amigos">
         {TABS.map((t) => (
           <Link
             key={t.id}
@@ -46,11 +46,18 @@ export default async function FriendsPage(props: PageProps<"/amigos">) {
             scroll={false}
             aria-current={tab === t.id ? "page" : undefined}
             className={cn(
-              "-mb-px inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors duration-150",
+              "-mb-px inline-flex shrink-0 items-center gap-1.5 border-b-2 px-2 py-2.5 text-sm font-medium transition-colors duration-150 sm:px-3 sm:py-2",
               tab === t.id ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
             )}
           >
-            {t.label}
+            {"short" in t ? (
+              <>
+                <span className="sm:hidden">{t.short}</span>
+                <span className="hidden sm:inline">{t.label}</span>
+              </>
+            ) : (
+              t.label
+            )}
             {count[t.id] > 0 &&
               (t.id === "convites" ? (
                 <span className="grid h-[18px] min-w-[18px] place-items-center rounded-full bg-lime px-1 text-[10px] font-bold text-ink tabular">{count[t.id]}</span>

@@ -282,3 +282,14 @@
     font-size: max(16px, 1em);
   }
 }
+
+/*
+ * Listas longas (leads, resultados, abordagens, protótipos): item fora da tela não é desenhado
+ * nem recalculado; o navegador guarda a altura medida para a barra de rolagem não pular.
+ * --cv-h = altura estimada do item antes da primeira medição. Não use em item cujo conteúdo
+ * precise vazar da caixa (menus e popovers do Radix vão em portal, então esses podem).
+ */
+@utility cv-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: auto var(--cv-h, 240px);
+}

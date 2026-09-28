@@ -60,7 +60,7 @@ export function LiveRefresh({ topics, className, label = "Ao vivo" }: { topics: 
   return (
     <span className={cn("inline-flex items-center gap-1.5 text-xs text-muted-foreground", className)} aria-live="polite">
       <span className="relative flex size-2">
-        {state === "live" && <span className="absolute inline-flex size-full animate-ping rounded-full bg-success opacity-60 motion-reduce:hidden" />}
+        {state === "live" && <span className="absolute inline-flex size-full animate-ping rounded-full bg-success opacity-60 [animation-iteration-count:3] motion-reduce:hidden" />}
         <span className={cn("relative inline-flex size-2 rounded-full", state === "live" ? "bg-success" : state === "connecting" ? "bg-warning" : "bg-muted-foreground")} />
       </span>
       {state === "live" ? label : state === "connecting" ? "Conectando…" : "Sem conexão"}

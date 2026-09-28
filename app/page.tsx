@@ -51,7 +51,7 @@ export default async function Home() {
 
   return (
     <div className="min-h-dvh bg-background">
-      <header className="sticky top-0 z-30 border-b border-white/10 bg-ink/95 text-white backdrop-blur-sm">
+      <header className="sticky top-0 z-30 border-b border-white/10 bg-ink text-white">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-4 sm:gap-4 sm:px-6">
           <Logo tagline className="min-w-0" taglineClassName="max-[419px]:hidden" />
           <nav className="flex shrink-0 items-center gap-1 sm:gap-2">

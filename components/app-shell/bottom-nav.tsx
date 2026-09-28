@@ -1,7 +1,7 @@
 "use client";
 
 import { Columns3, LayoutDashboard, Menu, MonitorSmartphone, Users } from "lucide-react";
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { Logo } from "@/components/app-shell/logo";
@@ -9,6 +9,19 @@ import { isActive } from "@/components/app-shell/nav";
 import { NavLinks } from "@/components/app-shell/sidebar";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
+
+/**
+ * Ícone da aba. Acende já no toque enquanto a próxima tela ainda não chegou (rede lenta,
+ * link não pré-carregado): o dedo sente resposta na hora em vez de achar que o toque falhou.
+ */
+function TabIcon({ icon: Icon, active }: { icon: typeof Menu; active: boolean }) {
+  const { pending } = useLinkStatus();
+  return (
+    <span className={cn("grid h-7 w-11 place-items-center rounded-full transition-colors duration-150", (active || pending) && "bg-lime text-ink")}>
+      <Icon className="size-[18px]" aria-hidden />
+    </span>
+  );
+}
 
 const ITEMS = [
   { href: "/dashboard", label: "Início", icon: LayoutDashboard },
@@ -30,7 +43,7 @@ export function BottomNav({ footer }: { footer: React.ReactNode }) {
   return (
     <>
       <nav
-        className="fixed inset-x-0 bottom-0 z-40 border-t bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-sm lg:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 border-t bg-card pb-[env(safe-area-inset-bottom)] lg:hidden"
         aria-label="Navegação rápida"
       >
         <ul className="mx-auto grid h-16 max-w-md grid-cols-5">
@@ -43,9 +56,7 @@ export function BottomNav({ footer }: { footer: React.ReactNode }) {
                   aria-current={active ? "page" : undefined}
                   className="flex h-full flex-col items-center justify-center gap-1 text-[11px] font-medium text-muted-foreground"
                 >
-                  <span className={cn("grid h-7 w-11 place-items-center rounded-full transition-colors duration-150", active && "bg-lime text-ink")}>
-                    <item.icon className="size-[18px]" aria-hidden />
-                  </span>
+                  <TabIcon icon={item.icon} active={active} />
                   <span className={cn(active && "font-semibold text-foreground")}>{item.label}</span>
                 </Link>
               </li>

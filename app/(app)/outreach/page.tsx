@@ -71,7 +71,7 @@ export default async function OutreachPage(props: PageProps<"/outreach">) {
               const shareUrl = p?.shareEnabled && p.shareSlug ? await proposalUrl(p.shareSlug) : null;
               const updated = l.outreaches.reduce((m, o) => (o.updatedAt > m ? o.updatedAt : m), l.outreaches[0].updatedAt);
               return (
-                <li key={l.id} className="grid gap-4 rounded-lg border bg-card p-5 md:grid-cols-[220px_minmax(0,1fr)]">
+                <li key={l.id} className="grid cv-auto gap-4 rounded-lg border bg-card p-5 [--cv-h:460px] md:grid-cols-[220px_minmax(0,1fr)] md:[--cv-h:300px]">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       {l.isDemo && <DemoBadge />}

@@ -27,7 +27,7 @@ export function LeadsTable({ leads }: { leads: LeadListItem[] }) {
         </thead>
         <tbody className="divide-y">
           {leads.map((l) => (
-            <tr key={l.id} className="relative flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 hover:bg-muted/40 md:table-row md:p-0">
+            <tr key={l.id} className="relative flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 hover:bg-muted/40 max-md:cv-auto max-md:[--cv-h:128px] md:table-row md:p-0">
               <td className="min-w-0 flex-1 basis-full md:px-4 md:py-3">
                 {/* ::after cobre a linha toda: clique em qualquer lugar abre o lead */}
                 <Link href={`/leads/${l.id}`} className="font-medium after:absolute after:inset-0 focus-visible:outline-none">
