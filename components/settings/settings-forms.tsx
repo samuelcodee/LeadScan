@@ -1,8 +1,9 @@
 "use client";
 
-import { Download, RotateCcw, ShieldX, Trash2 } from "lucide-react";
+import { Download, RotateCcw, ShieldX, Trash2, UserX } from "lucide-react";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
+import { deleteAccount } from "@/app/actions/profile";
 import { addSuppression, deleteAllMyData, resetDemo, updateProfile } from "@/app/actions/settings";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -150,6 +151,57 @@ export function DataActions({ isDemo }: { isDemo: boolean }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {!isDemo && <DeleteAccountDialog />}
     </div>
+  );
+}
+
+/**
+ * Excluir a conta (LGPD): apaga perfil, leads, protótipos, mensagens, arquivos, cobranças e vendas,
+ * encerra a sessão e sai da plataforma (recarga completa: nada da conta fica na tela).
+ */
+export function DeleteAccountDialog() {
+  const [confirm, setConfirm] = useState("");
+  const [pending, start] = useTransition();
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button variant="destructive">
+          <UserX /> Excluir minha conta
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Excluir sua conta?</DialogTitle>
+          <DialogDescription>
+            Some tudo: perfil, leads, protótipos, mensagens, arquivos, cobranças, vendas e posição no ranking. Você sai da plataforma na hora. Não dá para desfazer.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-1.5">
+          <Label htmlFor="confirm-account">
+            Digite <strong>EXCLUIR</strong> para confirmar
+          </Label>
+          <Input id="confirm-account" value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="off" />
+        </div>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline">Cancelar</Button>
+          </DialogClose>
+          <Button
+            variant="destructive"
+            disabled={confirm !== "EXCLUIR" || pending}
+            onClick={() =>
+              start(async () => {
+                const r = await deleteAccount({ confirm: "EXCLUIR" });
+                if (!r.ok) return void toast.error(r.error);
+                window.location.replace(r.data.redirect);
+              })
+            }
+          >
+            {pending ? "Excluindo…" : "Excluir conta"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -33,7 +33,9 @@ export type LiveEvent =
   /** convite de amizade recebido/aceito, amizade desfeita, bloqueio */
   | { type: "friend"; userId: string }
   /** pedido de mensagem aceito/recusado: a conversa muda de caixa */
-  | { type: "inbox"; userId: string; conversationId: string };
+  | { type: "inbox"; userId: string; conversationId: string }
+  /** Ultrapassagem no ranking: kind "up" = você passou alguém; "down" = alguém passou você */
+  | { type: "rank"; userId: string; kind: "up" | "down"; period: "week" | "month"; position: number; other: string; count: number };
 
 type Envelope = { origin: string; topics: string[]; event: LiveEvent };
 

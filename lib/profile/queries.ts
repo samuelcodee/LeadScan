@@ -2,7 +2,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import { isDemoMode } from "@/lib/env";
 import { nextLevelProgress } from "@/lib/gamification/levels";
-import { resolveDisplayTitle, salesStats, userTitles } from "@/lib/gamification/service";
+import { resolveDisplayTitle, salesStats, userTitles, verifiedTotals } from "@/lib/gamification/service";
 import { cachedLeaderboard } from "@/lib/ranking/cached";
 import { monthPeriod, weekPeriod } from "@/lib/time/periods";
 
@@ -91,9 +91,10 @@ export async function profileView(username: string, viewerId: string) {
   if (!isOwner && user.isDemo && !isDemoMode()) return null;
   if (!isOwner && !user.profilePublic) return { user, isOwner, closed: true as const };
 
-  const [titles, achievements, stats, weekly, totals, weekRank, monthRank] = await Promise.all([
+  const [titles, achievements, stats, levelStats, weekly, totals, weekRank, monthRank] = await Promise.all([
     userTitles(user.id, user.level),
     db.achievement.findMany({ where: { userId: user.id }, orderBy: { unlockedAt: "desc" }, select: { key: true, unlockedAt: true } }),
+    verifiedTotals(user.id),
     salesStats(user.id),
     weeklyActivity(user.id),
     activityTotals(user.id),
@@ -109,7 +110,7 @@ export async function profileView(username: string, viewerId: string) {
     titles,
     achievements,
     stats: { sales: stats.sales, revenueCents: showMoney ? stats.revenueCents : null, activeMonths: stats.activeMonths },
-    progress: nextLevelProgress(stats),
+    progress: nextLevelProgress(levelStats),
     weekly,
     totals,
     weekRank: weekRank.find((r) => r.userId === user.id) ?? null,

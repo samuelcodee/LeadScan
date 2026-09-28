@@ -4,6 +4,7 @@ import { isDemoMode } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { closedPodiums, leaderboard, platformDailyRevenue, platformTotals, type Podium, type RankedUser } from "@/lib/ranking/queries";
 import type { Period } from "@/lib/time/periods";
+import { recentCommunitySales } from "@/lib/ranking/overtakes";
 
 /**
  * Cache compartilhado do placar da comunidade. As consultas são iguais para todo mundo
@@ -40,6 +41,12 @@ export async function cachedPlatformTotals() {
   const t = await run();
   const revive = (p: Period): Period => ({ ...p, start: new Date(p.start), end: new Date(p.end) });
   return { ...t, week: revive(t.week), month: revive(t.month) };
+}
+
+/** Últimas vendas da comunidade ("acabou de acontecer"). Cai junto com o placar a cada venda. */
+export async function cachedRecentSales(limit = 8) {
+  const run = unstable_cache(() => recentCommunitySales(limit), ["recent-sales", mode(), String(limit)], { tags: [COMMUNITY_TAG], revalidate: REVALIDATE });
+  return (await run()).map((s) => ({ ...s, closedAt: new Date(s.closedAt) }));
 }
 
 export async function cachedPlatformDailyRevenue(days = 30) {

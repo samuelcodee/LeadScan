@@ -8,6 +8,8 @@ import { clearSessionCookie } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { userTitles } from "@/lib/gamification/service";
 import { fileToBuffer, saveImage } from "@/lib/media/store";
+import { logger } from "@/lib/logger";
+import { invalidateCommunity } from "@/lib/ranking/cached";
 import { publish } from "@/lib/realtime";
 
 const instagramHandle = z
@@ -109,6 +111,9 @@ export const deleteAccount = action(
     if (user.isDemo) throw new UserFacingError("A conta de demonstração não pode ser excluída.");
     await db.user.delete({ where: { id: user.id } });
     await clearSessionCookie();
-    return { redirect: "/" };
+    // o placar/faturamento da comunidade não pode seguir mostrando quem saiu
+    invalidateCommunity();
+    logger.info("conta excluída a pedido do usuário", { userId: user.id });
+    return { redirect: "/login?conta=excluida" };
   },
 );

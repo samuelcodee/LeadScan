@@ -4,6 +4,7 @@ import { decryptSecret, encryptSecret } from "@/lib/crypto/secrets";
 import { db } from "@/lib/db";
 import { env, mockPaymentsEnabled } from "@/lib/env";
 import { pointsForSale } from "@/lib/gamification/points";
+import { announceOvertakes } from "@/lib/ranking/overtakes";
 import { recomputeLevel } from "@/lib/gamification/service";
 import type { Charge, PaymentAccount } from "@/lib/generated/prisma/client";
 import { randomSlug } from "@/lib/hash";
@@ -357,6 +358,7 @@ export async function applyPaymentUpdate(update: PaymentUpdate, where: { chargeI
     const { level, gained } = await recomputeLevel(charge.userId);
     await publish({ type: "sale", userId: charge.userId, amountCents: sale.amountCents, points: sale.points, verified: true });
     await publish({ type: "charge", userId: charge.userId, chargeId: charge.id, status: "PAID" });
+    await announceOvertakes(charge.userId, sale.points, sale.amountCents);
     logger.info("pagamento confirmado", { chargeId: charge.id, points, level, gained });
     return { applied: true, sale, level, gained };
   }

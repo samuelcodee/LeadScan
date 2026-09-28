@@ -246,13 +246,12 @@
     text-size-adjust: 100%;
   }
   /* celular: a página nunca "anda" para os lados. clip (e não hidden) mantém o sticky funcionando;
-     rolagem horizontal só dentro de áreas próprias (kanban, tabelas, abas). */
+     rolagem horizontal só dentro de áreas próprias (kanban, tabelas, abas).
+     O eixo vertical fica livre: puxar a tela para baixo no topo atualiza a página (iPhone e Android). */
   html,
   body {
     overflow-x: clip;
-    /* sem o "elástico" do iPhone/Android: a página não estica nem quica no topo e no fim,
-       e o cabeçalho e a barra de baixo ficam parados como num app */
-    overscroll-behavior-y: none;
+    overscroll-behavior-x: none;
   }
   /* Números alinhados em tabelas, métricas e scores */
   .tabular {

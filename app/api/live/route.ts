@@ -24,6 +24,8 @@ function toPayload(e: LiveEvent, me: string) {
       return { type: e.type, conversationId: e.conversationId, messageId: e.messageId };
     case "inbox":
       return { type: e.type, conversationId: e.conversationId };
+    case "rank":
+      return { type: e.type, kind: e.kind, period: e.period, position: e.position, other: e.other, count: e.count };
     case "read":
     case "typing":
       return { type: e.type, mine: e.byUserId === me, conversationId: e.conversationId };

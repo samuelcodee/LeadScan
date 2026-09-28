@@ -12,6 +12,7 @@ import { BlockMenu, FriendButton } from "@/components/social/friends";
 import { accountAge, UserAvatar } from "@/components/profile/identity";
 import { Insignia } from "@/components/profile/insignia";
 import { PresenceLabel } from "@/components/chat/presence-label";
+import { LiveRefresh } from "@/components/live/live-refresh";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/session";
 import { badgeKeyFor, getLevel } from "@/lib/gamification/levels";
@@ -108,7 +109,9 @@ export default async function PublicProfilePage(props: PageProps<"/u/[username]"
     <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
       {header}
 
-      <div className="mt-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {/* vendas, pontos e posição mudam na hora em que um pagamento é confirmado */}
+      <LiveRefresh topics={["community"]} label="Ao vivo: vendas e posição atualizam sozinhas" className="mt-6" />
+      <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile label="Vendas verificadas" value={formatInt(stats.sales)} context={stats.activeMonths ? `em ${stats.activeMonths} ${stats.activeMonths === 1 ? "mês" : "meses"}` : undefined} />
         <StatTile
           label="Faturamento pela plataforma"

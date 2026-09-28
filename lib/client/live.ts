@@ -7,12 +7,18 @@
  */
 export type LiveMessage = {
   /** "resync" = a conexão caiu e voltou: quem mostra contadores/mensagens deve recarregar */
-  type: "sale" | "charge" | "profile" | "message" | "deleted" | "edited" | "read" | "typing" | "friend" | "inbox" | "resync";
+  type: "sale" | "charge" | "profile" | "message" | "deleted" | "edited" | "read" | "typing" | "friend" | "inbox" | "rank" | "resync";
   scope: "me" | "community";
   mine?: boolean;
   points?: number;
   conversationId?: string;
   messageId?: string;
+  /** rank: ultrapassagem */
+  kind?: "up" | "down";
+  period?: "week" | "month";
+  position?: number;
+  other?: string;
+  count?: number;
 };
 export type LiveStatus = "connecting" | "live" | "offline";
 

@@ -659,6 +659,8 @@ model Message {
   deletedAt      DateTime?
   /// Texto corrigido por quem enviou (a bolha mostra "editada").
   editedAt       DateTime?
+  /// "Apagar para mim": some só para estes usuários (quem recebeu também pode tirar da própria conversa)
+  hiddenFor      String[]     @default([])
 
   @@index([conversationId, createdAt(sort: Desc)])
   @@index([senderId])

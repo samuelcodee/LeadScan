@@ -320,7 +320,8 @@ export function AccountFields({ email, phone, google, isDemo }: { email: string 
                 start(async () => {
                   const r = await deleteAccount({ confirm: "EXCLUIR" });
                   if (!r.ok) return void toast.error(r.error);
-                  router.replace(r.data.redirect);
+                  // recarga completa: nada da conta apagada fica na tela (conexão ao vivo, cache do app)
+                  window.location.replace(r.data.redirect);
                 })
               }
             >

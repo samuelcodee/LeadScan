@@ -1,17 +1,17 @@
 "use client";
 
-import { ArrowLeft, Ban, Check, Loader2, MoreHorizontal, MoreVertical, Mic, Paperclip, Pencil, SendHorizontal, Trash2, User, X } from "lucide-react";
+import { ArrowLeft, Ban, Check, EyeOff, Loader2, MoreHorizontal, MoreVertical, Mic, Paperclip, Pencil, SendHorizontal, Trash2, User, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { answerMessageRequest, deleteChatMessage, editChatMessage, markConversationRead, sendText, setBlocked } from "@/app/actions/chat";
-import { AudioPlayer, ChatImage, chatMediaUrl, fmtDuration, readVideo } from "@/components/chat/media";
+import { answerMessageRequest, deleteChatMessage, editChatMessage, hideChatMessage, markConversationRead, sendText, setBlocked } from "@/app/actions/chat";
+import { AudioPlayer, ChatImage, chatMediaUrl, compressVideo, fmtDuration, readVideo } from "@/components/chat/media";
 import { PresenceLabel } from "@/components/chat/presence-label";
 import { DemoBadge } from "@/components/common/page-header";
 import { UserAvatar } from "@/components/profile/identity";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { presenceOf } from "@/lib/chat/presence";
 import type { ChatMessage, ChatPeer } from "@/lib/chat/service";
 import { shrinkImage } from "@/lib/client/image";
@@ -26,6 +26,8 @@ type Msg = ChatMessage & { pending?: boolean; progress?: number; localUrl?: stri
 type Page = { conversation: Conv; messages: ChatMessage[]; hasMore: boolean };
 
 const MAX_VIDEO = 16 * 1024 * 1024;
+/** Vídeo maior que o limite é compactado no aparelho antes de subir (até este tamanho de origem). */
+const MAX_VIDEO_SOURCE = 400 * 1024 * 1024;
 const MAX_AUDIO_MS = 5 * 60_000;
 
 function dayLabel(iso: string, now = new Date()) {
@@ -305,7 +307,7 @@ export function ChatThread({ meId, initial }: { meId: string; initial: Page }) {
     const isVideo = file.type.startsWith("video/");
     const isImage = file.type.startsWith("image/");
     if (!isVideo && !isImage) return void toast.error("Envie uma foto ou um vídeo.");
-    if (isVideo && file.size > MAX_VIDEO) return void toast.error("Vídeo muito grande. O limite é 16 MB (cerca de 1 minuto em boa qualidade).");
+    if (isVideo && file.size > MAX_VIDEO_SOURCE) return void toast.error("Vídeo grande demais. Envie um trecho de até uns 3 minutos.");
     const localUrl = URL.createObjectURL(file);
     const tmp = addPending({ kind: isVideo ? "VIDEO" : "IMAGE", localUrl });
     try {
@@ -315,12 +317,20 @@ export function ChatThread({ meId, initial }: { meId: string; initial: Page }) {
         form.set("kind", "image");
         form.set("file", new File([blob], "foto.jpg", { type: blob.type || "image/jpeg" }));
       } else {
-        const { poster, durationMs } = await readVideo(file).catch(() => {
-          throw new Error("Não conseguimos ler esse vídeo. MP4 funciona melhor.");
-        });
+        // Acima do limite: compacta aqui mesmo (resolução menor), mostrando o andamento na bolha
+        let video: Blob = file;
+        if (file.size > MAX_VIDEO) {
+          toast.info("Vídeo grande: compactando antes de enviar. Deixe esta tela aberta.");
+          const small = await compressVideo(file, (p) => setProgress(tmp, p * 0.5));
+          if (!small || small.size > MAX_VIDEO) throw new Error("Vídeo grande demais para enviar (limite 16 MB). Grave um trecho mais curto.");
+          video = small;
+        }
+        const { poster, durationMs } = await readVideo(video);
         form.set("kind", "video");
-        if (file.size > PART) form.set("upload", await uploadParts(id, file, "video", (p) => setProgress(tmp, p)));
-        else form.set("file", file);
+        const base = video === file ? 0 : 0.5;
+        const scaled = (p: number) => setProgress(tmp, base + p * (1 - base));
+        if (video.size > PART) form.set("upload", await uploadParts(id, video, "video", scaled));
+        else form.set("file", video instanceof File ? video : new File([video], "video.mp4", { type: video.type || "video/mp4" }));
         form.set("poster", new File([poster], "capa.jpg", { type: "image/jpeg" }));
         form.set("durationMs", String(durationMs));
       }
@@ -348,6 +358,25 @@ export function ChatThread({ meId, initial }: { meId: string; initial: Page }) {
       resolvePending(tmp, null);
       toast.error(err instanceof Error ? err.message : "Não deu para enviar o áudio.");
     }
+  };
+
+  /** Apagar para mim: some daqui na hora; a outra pessoa continua vendo. */
+  const hide = async (messageId: string) => {
+    const before = messages;
+    setMessages((cur) => cur.filter((m) => m.id !== messageId));
+    const r = await hideChatMessage({ messageId });
+    if (!r.ok) {
+      setMessages(before);
+      return void toast.error(r.error);
+    }
+    toast.success("Mensagem apagada para você.");
+  };
+
+  const blockPeer = async () => {
+    const r = await setBlocked({ userId: conv.peer.id, blocked: true });
+    if (!r.ok) return void toast.error(r.error);
+    setConv((c) => ({ ...c, iBlocked: true }));
+    toast.success(`${conv.peer.name} bloqueado. Vocês não trocam mais mensagens.`);
   };
 
   const remove = async (messageId: string) => {
@@ -450,6 +479,9 @@ export function ChatThread({ meId, initial }: { meId: string; initial: Page }) {
                             <Pencil /> Editar
                           </DropdownMenuItem>
                         )}
+                        <DropdownMenuItem onSelect={() => void hide(m.id)}>
+                          <EyeOff /> Apagar para mim
+                        </DropdownMenuItem>
                         <DropdownMenuItem variant="destructive" onSelect={() => void remove(m.id)}>
                           <Trash2 /> Apagar para todos
                         </DropdownMenuItem>
@@ -457,6 +489,30 @@ export function ChatThread({ meId, initial }: { meId: string; initial: Page }) {
                     </DropdownMenu>
                   )}
                   <Bubble m={m} mine={mine} onOpenImage={setLightbox} editing={editing?.id === m.id} />
+                  {/* Mensagem recebida: quem recebe também pode tirar da própria conversa e bloquear quem mandou */}
+                  {!mine && !m.pending && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        className="grid size-7 place-items-center rounded-full text-muted-foreground opacity-0 transition-opacity hover:bg-muted focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100 [@media(hover:none)]:opacity-60"
+                        aria-label="Opções da mensagem"
+                      >
+                        <MoreHorizontal className="size-4" />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="min-w-48">
+                        <DropdownMenuItem onSelect={() => void hide(m.id)}>
+                          <EyeOff /> Apagar para mim
+                        </DropdownMenuItem>
+                        {!conv.iBlocked && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem variant="destructive" onSelect={() => void blockPeer()}>
+                              <Ban /> Bloquear {conv.peer.name.split(" ")[0]}
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
                 </div>
                 {m.id === lastMine?.id && (
                   <p className="mt-0.5 text-right text-[11px] text-muted-foreground">{seen ? "Visto" : "Enviado"}</p>

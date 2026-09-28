@@ -218,7 +218,7 @@ export async function listMessages(meId: string, conversationId: string, opts: {
   if (opts.after) {
     const pivot = await db.message.findFirst({ where: { id: opts.after, conversationId }, select: { createdAt: true } });
     const rows = await db.message.findMany({
-      where: { conversationId, ...(pivot ? { createdAt: { gt: pivot.createdAt } } : {}) },
+      where: { conversationId, NOT: { hiddenFor: { has: meId } }, ...(pivot ? { createdAt: { gt: pivot.createdAt } } : {}) },
       orderBy: { createdAt: "asc" },
       take: 100,
       select: MESSAGE_SELECT,
@@ -227,7 +227,7 @@ export async function listMessages(meId: string, conversationId: string, opts: {
   }
   const pivot = opts.before ? await db.message.findFirst({ where: { id: opts.before, conversationId }, select: { createdAt: true } }) : null;
   const rows = await db.message.findMany({
-    where: { conversationId, ...(pivot ? { createdAt: { lt: pivot.createdAt } } : {}) },
+    where: { conversationId, NOT: { hiddenFor: { has: meId } }, ...(pivot ? { createdAt: { lt: pivot.createdAt } } : {}) },
     orderBy: { createdAt: "desc" },
     take: take + 1,
     select: MESSAGE_SELECT,
@@ -291,6 +291,15 @@ export async function deleteMessage(meId: string, messageId: string) {
   const peerId = await peerOf(meId, msg.conversationId);
   const event = { type: "deleted" as const, conversationId: msg.conversationId, messageId };
   await Promise.all([publish({ ...event, userId: peerId }), publish({ ...event, userId: meId })]);
+}
+
+/** "Apagar para mim": qualquer participante tira a mensagem da PRÓPRIA conversa (a outra pessoa continua vendo). */
+export async function hideMessage(meId: string, messageId: string) {
+  const msg = await db.message.findUnique({ where: { id: messageId }, select: { conversationId: true, hiddenFor: true } });
+  if (!msg) throw new UserFacingError("Mensagem não encontrada.");
+  await assertMember(meId, msg.conversationId);
+  if (msg.hiddenFor.includes(meId)) return;
+  await db.message.update({ where: { id: messageId }, data: { hiddenFor: { push: meId } } });
 }
 
 /** Corrigir o texto: só quem enviou, só mensagem de texto, não apagada. A bolha passa a dizer "editada". */

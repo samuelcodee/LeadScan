@@ -12,8 +12,8 @@ import { badgeKeyFor } from "@/lib/gamification/levels";
 import { requireUser } from "@/lib/auth/session";
 import { env } from "@/lib/env";
 import { POINTS_PER_SALE, VALUE_POINTS_CAP } from "@/lib/gamification/points";
-import { formatBRL, formatInt } from "@/lib/format";
-import { cachedClosedPodiums, cachedLeaderboard, cachedPlatformDailyRevenue, cachedPlatformTotals } from "@/lib/ranking/cached";
+import { formatBRL, formatInt, formatRelative } from "@/lib/format";
+import { cachedClosedPodiums, cachedLeaderboard, cachedPlatformDailyRevenue, cachedPlatformTotals, cachedRecentSales } from "@/lib/ranking/cached";
 import { lastDays, monthPeriod, weekPeriod } from "@/lib/time/periods";
 import { cn } from "@/lib/utils";
 
@@ -68,7 +68,7 @@ export default async function CommunityPage(props: PageProps<"/comunidade">) {
 
 async function RankingTab({ meId, optedIn, periodId }: { meId: string; optedIn: boolean; periodId: string }) {
   const period = periodId === "semana" ? weekPeriod() : periodId === "mes" ? monthPeriod() : null;
-  const rows = await cachedLeaderboard(period, 100);
+  const [rows, recent] = await Promise.all([cachedLeaderboard(period, 100), cachedRecentSales(6)]);
   const me = rows.find((r) => r.userId === meId);
   const minSale = formatBRL(env().RANKING_MIN_SALE_CENTS);
 
@@ -102,6 +102,30 @@ async function RankingTab({ meId, optedIn, periodId }: { meId: string; optedIn: 
         </p>
       )}
 
+      {recent.length > 0 && (
+        <section aria-label="Vendas mais recentes" className="rounded-lg border bg-card p-3 shadow-soft">
+          <p className="px-1 pb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Acabou de acontecer</p>
+          <ul className="grid grid-cols-1 gap-1">
+            {recent.map((s) => (
+              <li key={s.id} className="flex min-w-0 items-center gap-2.5 rounded-md px-1 py-1.5 text-sm">
+                <UserAvatar name={s.user.name} avatarId={s.user.avatarId} size="sm" badge={badgeKeyFor(s.user.displayTitle, s.user.level)} />
+                <p className="min-w-0 flex-1 truncate">
+                  {s.user.username ? (
+                    <Link href={`/u/${s.user.username}`} className="font-medium hover:underline">
+                      {s.user.name}
+                    </Link>
+                  ) : (
+                    <span className="font-medium">{s.user.name}</span>
+                  )}{" "}
+                  <span className="text-muted-foreground">fechou</span> <span className="font-semibold tabular">{formatBRL(s.amountCents)}</span>
+                </p>
+                <span className="shrink-0 text-xs text-muted-foreground tabular">+{formatInt(s.points)} pts · {formatRelative(s.closedAt)}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {rows.length === 0 ? (
         <EmptyState icon={<Trophy />} title="Ninguém pontuou neste período ainda">
           O primeiro pagamento confirmado pela plataforma já coloca alguém no topo.
@@ -118,8 +142,8 @@ async function RankingTab({ meId, optedIn, periodId }: { meId: string; optedIn: 
       )}
 
       <p className="text-xs leading-relaxed text-muted-foreground">
-        Como pontuar: {POINTS_PER_SALE} pontos por venda paga pela plataforma + 1 ponto a cada R$ 10 (até {formatInt(VALUE_POINTS_CAP)} por venda). Vendas abaixo de {minSale},
-        estornadas ou registradas à mão não contam. Desempate: faturamento e, depois, quem chegou primeiro. Só aparece quem escolheu participar.
+        Como pontuar: 1 ponto a cada R$ 10 pagos pela plataforma (até {formatInt(VALUE_POINTS_CAP)} por venda) + {POINTS_PER_SALE} de bônus por venda a partir de {minSale}.
+        Toda venda paga pelo link conta (mínimo 1 ponto). Estornadas ou registradas à mão não contam. Desempate: faturamento e, depois, quem chegou primeiro. Só aparece quem escolheu participar.
       </p>
     </div>
   );
