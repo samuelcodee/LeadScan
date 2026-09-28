@@ -188,6 +188,8 @@ export function ChargeDialog({
               <div className="grid gap-1.5">
                 <Label htmlFor="charge-amount">Valor</Label>
                 <MoneyInput id="charge-amount" cents={amount} onChange={setAmount} />
+                {/* o botão fica apagado abaixo do mínimo: diz o porquê em vez de parecer quebrado */}
+                {amount < 500 && <p className="text-xs text-destructive">O valor mínimo de uma cobrança é R$ 5,00.</p>}
               </div>
               {data.providers.length > 1 && (
                 <div className="grid gap-1.5">
