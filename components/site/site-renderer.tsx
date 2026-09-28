@@ -18,12 +18,15 @@ export function SiteRenderer({
   spec,
   mode = "page",
   selectedId,
+  editable,
   className,
 }: {
   spec: SiteSpec;
   /** embedded: dentro do editor/miniatura (links inertes). page: página real. */
   mode?: "page" | "embedded";
   selectedId?: string | null;
+  /** Estúdio: cada seção acende ao passar o mouse, mostrando que o clique abre a edição. */
+  editable?: boolean;
   className?: string;
 }) {
   const b = spec.business;
@@ -82,7 +85,8 @@ export function SiteRenderer({
               data-section-id={s.id}
               className={cn(
                 mode === "embedded" && "relative outline-offset-[-2px] transition-[outline-color] duration-150",
-                mode === "embedded" && selectedId === s.id && "outline-2 outline-dashed outline-[var(--site-primary-text)]",
+                mode === "embedded" && editable && "cursor-pointer hover:outline-2 hover:outline-dashed hover:outline-(--site-primary-text)/45",
+                mode === "embedded" && selectedId === s.id && "outline-4 outline-dashed outline-[var(--site-primary-text)] hover:outline-(--site-primary-text)",
               )}
             >
               <SectionView s={s} ctx={ctx} />

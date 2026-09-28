@@ -12,6 +12,7 @@ import { NavLinks } from "@/components/app-shell/sidebar";
 import { UnreadBadge } from "@/components/chat/unread-badge";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { cn } from "@/lib/utils";
 
 export function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme();
@@ -32,6 +33,8 @@ export function Topbar({ isDemo, footer }: { isDemo: boolean; footer: React.Reac
   const [palette, setPalette] = useState(false);
   const [paletteUsed, setPaletteUsed] = useState(false);
   const pathname = usePathname();
+  // Estúdio do protótipo no celular/tablet: tela inteira (ele tem a própria barra com "voltar")
+  const studio = /^\/prototypes\/(?!templates\/)[^/]+$/.test(pathname);
 
   const openPalette = (v: boolean) => {
     if (v) setPaletteUsed(true);
@@ -51,7 +54,7 @@ export function Topbar({ isDemo, footer }: { isDemo: boolean; footer: React.Reac
   }, []);
 
   return (
-    <header className="sticky top-0 z-40 border-b bg-card">
+    <header className={cn("sticky top-0 z-40 border-b bg-card", studio && "max-lg:hidden")}>
       <div className="flex h-14 items-center gap-2 px-3 sm:px-5">
         <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setMenu(true)} aria-label="Abrir menu">
           <Menu />

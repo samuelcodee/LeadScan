@@ -1,14 +1,13 @@
 "use client";
 
-import { AreaField, ImageField, ListEditor, TextField } from "@/components/editor/fields";
+import { AreaField, ChoiceField, ImageField, ListEditor, TextField } from "@/components/editor/fields";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { TEMPLATE_LIST } from "@/lib/templates/registry";
 import { HERO_LAYOUTS } from "@/lib/templates/constants";
 import type { Section } from "@/lib/templates/types";
 
-const HERO_LAYOUT_LABEL = { split: "Texto + foto ao lado", overlay: "Foto de fundo", stacked: "Título grande + foto abaixo" } as const;
+const HERO_LAYOUT_LABEL = { split: "Foto ao lado", overlay: "Foto de fundo", stacked: "Foto abaixo" } as const;
 
 /** Todas as fotos da biblioteca (template atual primeiro) para troca rápida. */
 function imagePool(templateId: string) {
@@ -40,7 +39,7 @@ export function SectionEditor({
     case "hero": {
       const s = section;
       return (
-        <div className="grid gap-4">
+        <div className="grid grid-cols-1 gap-4">
           <TextField label="Chamada acima do título" value={s.data.eyebrow} max={80} onChange={(v) => set(s, { eyebrow: v })} />
           <AreaField label="Título" value={s.data.title} max={120} rows={2} onChange={(v) => set(s, { title: v })} />
           <AreaField label="Subtítulo" value={s.data.subtitle} max={280} onChange={(v) => set(s, { subtitle: v })} />
@@ -48,29 +47,20 @@ export function SectionEditor({
             <TextField label="Botão principal" value={s.data.ctaLabel} max={40} onChange={(v) => set(s, { ctaLabel: v })} />
             <TextField label="Link secundário" value={s.data.secondaryLabel} max={40} onChange={(v) => set(s, { secondaryLabel: v })} />
           </div>
-          <div className="grid gap-1.5">
-            <Label className="text-xs text-muted-foreground">Layout</Label>
-            <Select value={s.data.layout} onValueChange={(v) => set(s, { layout: v as (typeof HERO_LAYOUTS)[number] })}>
-              <SelectTrigger className="h-9 w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {HERO_LAYOUTS.map((l) => (
-                  <SelectItem key={l} value={l}>
-                    {HERO_LAYOUT_LABEL[l]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
           <ImageField label="Imagem" value={s.data.image} suggestions={pool} onChange={(v) => set(s, { image: v })} />
+          <ChoiceField
+            label="Posição da foto"
+            value={s.data.layout}
+            options={HERO_LAYOUTS.map((l) => ({ value: l, label: HERO_LAYOUT_LABEL[l] }))}
+            onChange={(v) => set(s, { layout: v })}
+          />
         </div>
       );
     }
     case "about": {
       const s = section;
       return (
-        <div className="grid gap-4">
+        <div className="grid grid-cols-1 gap-4">
           <TextField label="Título" value={s.data.title} max={100} onChange={(v) => set(s, { title: v })} />
           <AreaField label="Texto" value={s.data.body} max={900} rows={6} onChange={(v) => set(s, { body: v })} />
           <ImageField label="Imagem" value={s.data.image} suggestions={pool} onChange={(v) => set(s, { image: v })} />
@@ -92,7 +82,7 @@ export function SectionEditor({
     case "benefits": {
       const s = section;
       return (
-        <div className="grid gap-4">
+        <div className="grid grid-cols-1 gap-4">
           <TextField label="Título" value={s.data.title} max={100} onChange={(v) => set(s, { title: v })} />
           {s.type === "services" && <AreaField label="Subtítulo" value={s.data.subtitle} max={240} rows={2} onChange={(v) => set(s, { subtitle: v })} />}
           <ListEditor
@@ -114,7 +104,7 @@ export function SectionEditor({
     case "gallery": {
       const s = section;
       return (
-        <div className="grid gap-4">
+        <div className="grid grid-cols-1 gap-4">
           <TextField label="Título" value={s.data.title} max={100} onChange={(v) => set(s, { title: v })} />
           <ListEditor
             items={s.data.images}
@@ -122,7 +112,7 @@ export function SectionEditor({
             addLabel="Adicionar foto"
             create={() => pool[s.data.images.length % pool.length]}
             onChange={(images) => set(s, { images })}
-            render={(item, setItem, i) => <ImageField label={`Foto ${i + 1}`} value={item} suggestions={pool.slice(0, 6)} onChange={setItem} />}
+            render={(item, setItem, i) => <ImageField compact label={`Foto ${i + 1}`} value={item} suggestions={pool.slice(0, 6)} onChange={setItem} />}
           />
         </div>
       );
@@ -130,7 +120,7 @@ export function SectionEditor({
     case "testimonials": {
       const s = section;
       return (
-        <div className="grid gap-4">
+        <div className="grid grid-cols-1 gap-4">
           <TextField label="Título" value={s.data.title} max={100} onChange={(v) => set(s, { title: v })} />
           <Label className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm font-normal">
             <span>
@@ -158,7 +148,7 @@ export function SectionEditor({
     case "faq": {
       const s = section;
       return (
-        <div className="grid gap-4">
+        <div className="grid grid-cols-1 gap-4">
           <TextField label="Título" value={s.data.title} max={100} onChange={(v) => set(s, { title: v })} />
           <ListEditor
             items={s.data.items}
@@ -179,7 +169,7 @@ export function SectionEditor({
     case "location": {
       const s = section;
       return (
-        <div className="grid gap-4">
+        <div className="grid grid-cols-1 gap-4">
           <TextField label="Título" value={s.data.title} max={100} onChange={(v) => set(s, { title: v })} />
           <AreaField label="Observação" value={s.data.note} max={240} rows={2} onChange={(v) => set(s, { note: v })} />
           <p className="text-xs text-muted-foreground">Endereço, horários e telefone vêm dos dados do lead.</p>
@@ -190,7 +180,7 @@ export function SectionEditor({
     case "cta": {
       const s = section;
       return (
-        <div className="grid gap-4">
+        <div className="grid grid-cols-1 gap-4">
           <AreaField label="Título" value={s.data.title} max={120} rows={2} onChange={(v) => set(s, { title: v })} />
           <AreaField label="Subtítulo" value={s.data.subtitle} max={240} rows={2} onChange={(v) => set(s, { subtitle: v })} />
           <TextField label="Texto do botão" value={s.data.ctaLabel} max={40} onChange={(v) => set(s, { ctaLabel: v })} />

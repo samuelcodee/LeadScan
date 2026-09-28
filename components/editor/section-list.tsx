@@ -1,34 +1,34 @@
 "use client";
 
-import { ArrowDown, ArrowUp, Eye, EyeOff, GripVertical, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronRight, Eye, EyeOff, GripVertical, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { SECTION_LABEL, SECTION_TYPES, type SectionType } from "@/lib/templates/constants";
 import type { Section } from "@/lib/templates/types";
 import { cn } from "@/lib/utils";
 
 /**
- * Lista de seções: arrastar para reordenar (desktop), setas (teclado/toque),
- * mostrar/ocultar, remover e adicionar.
+ * Lista de seções: tocar no nome abre a seção; setas mudam a ordem; olho mostra/oculta;
+ * lixeira remove. Arrastar para reordenar só com mouse (no toque disputava com a rolagem).
  */
 export function SectionList({
   sections,
-  selectedId,
-  onSelect,
+  onOpen,
   onChange,
   onAdd,
   adding,
 }: {
   sections: Section[];
-  selectedId: string | null;
-  onSelect: (id: string) => void;
+  onOpen: (id: string) => void;
   onChange: (sections: Section[]) => void;
   onAdd: (type: SectionType) => void;
   adding: boolean;
 }) {
   const [dragId, setDragId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
+  const canDrag = useMediaQuery("(pointer: fine)");
 
   const move = (from: number, to: number) => {
     if (to < 0 || to >= sections.length) return;
@@ -39,11 +39,11 @@ export function SectionList({
   };
 
   return (
-    <div className="grid gap-1">
+    <div className="grid grid-cols-1 gap-1.5">
       {sections.map((s, i) => (
         <div
           key={s.id}
-          draggable
+          draggable={canDrag}
           onDragStart={(e) => {
             setDragId(s.id);
             e.dataTransfer.effectAllowed = "move";
@@ -65,46 +65,51 @@ export function SectionList({
             setOverId(null);
           }}
           className={cn(
-            "group flex items-center gap-1 rounded-md border bg-background pl-1 pr-1 transition-colors duration-150",
-            selectedId === s.id ? "border-foreground/50" : "border-transparent hover:bg-muted/60",
+            "flex items-center gap-0.5 rounded-md border bg-background pr-1 transition-colors duration-150",
             overId === s.id && dragId !== s.id && "border-dashed border-foreground/60",
             dragId === s.id && "opacity-50",
           )}
         >
-          <GripVertical className="size-4 shrink-0 cursor-grab text-muted-foreground" aria-hidden />
+          {canDrag && <GripVertical className="ml-1 size-4 shrink-0 cursor-grab text-muted-foreground" aria-hidden />}
           <button
             type="button"
-            onClick={() => onSelect(s.id)}
-            className={cn("min-w-0 flex-1 truncate py-2 text-left text-sm", !s.visible && "text-muted-foreground line-through")}
+            onClick={() => onOpen(s.id)}
+            className="flex min-w-0 flex-1 items-center gap-1 rounded-md py-2.5 pl-2.5 text-left text-sm hover:bg-muted/60 pointer-coarse:py-3"
+            aria-label={`Editar ${SECTION_LABEL[s.type]}`}
           >
-            {SECTION_LABEL[s.type]}
+            <span className={cn("min-w-0 flex-1 truncate font-medium", !s.visible && "text-muted-foreground line-through")}>{SECTION_LABEL[s.type]}</span>
+            <span className="flex shrink-0 items-center text-xs text-muted-foreground">
+              Editar <ChevronRight className="size-4" aria-hidden />
+            </span>
           </button>
-          <div className="flex items-center opacity-100 transition-opacity duration-150 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
-            <Button variant="ghost" size="icon-xs" onClick={() => move(i, i - 1)} disabled={i === 0} aria-label="Subir seção">
-              <ArrowUp />
+          <span className="mx-0.5 h-6 w-px shrink-0 bg-border" aria-hidden />
+          <Button variant="ghost" size="icon-xs" onClick={() => move(i, i - 1)} disabled={i === 0} aria-label="Subir seção">
+            <ArrowUp />
+          </Button>
+          <Button variant="ghost" size="icon-xs" onClick={() => move(i, i + 1)} disabled={i === sections.length - 1} aria-label="Descer seção">
+            <ArrowDown />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            onClick={() => onChange(sections.map((x) => (x.id === s.id ? ({ ...x, visible: !x.visible } as Section) : x)))}
+            aria-label={s.visible ? "Ocultar seção" : "Mostrar seção"}
+            title={s.visible ? "Ocultar no site" : "Mostrar no site"}
+          >
+            {s.visible ? <Eye /> : <EyeOff />}
+          </Button>
+          {s.type !== "hero" ? (
+            <Button variant="ghost" size="icon-xs" onClick={() => onChange(sections.filter((x) => x.id !== s.id))} aria-label="Remover seção">
+              <Trash2 />
             </Button>
-            <Button variant="ghost" size="icon-xs" onClick={() => move(i, i + 1)} disabled={i === sections.length - 1} aria-label="Descer seção">
-              <ArrowDown />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              onClick={() => onChange(sections.map((x) => (x.id === s.id ? ({ ...x, visible: !x.visible } as Section) : x)))}
-              aria-label={s.visible ? "Ocultar seção" : "Mostrar seção"}
-            >
-              {s.visible ? <Eye /> : <EyeOff />}
-            </Button>
-            {s.type !== "hero" && (
-              <Button variant="ghost" size="icon-xs" onClick={() => onChange(sections.filter((x) => x.id !== s.id))} aria-label="Remover seção">
-                <Trash2 />
-              </Button>
-            )}
-          </div>
+          ) : (
+            <span className="size-6 shrink-0 pointer-coarse:size-8" aria-hidden />
+          )}
         </div>
       ))}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm" className="mt-2" disabled={adding}>
+          <Button variant="outline" className="mt-2" disabled={adding}>
             <Plus /> {adding ? "Adicionando…" : "Adicionar seção"}
           </Button>
         </DropdownMenuTrigger>
