@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, CheckCircle2, Loader2 } from "lucide-react";
+import { ArrowRight, CheckCircle2, Loader2, RotateCcw } from "lucide-react";
 import { SearchProgressBar } from "@/components/search/progress";
 import { useSearchRunner, type SearchInput } from "@/components/search/use-search-runner";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,8 @@ export type SweepLine = { label: string; city: string; found: number; exhausted:
 
 /**
  * Faixa abaixo do título dos resultados: quanto já foi varrido de cada cidade e o botão que
- * busca a próxima leva (mesma busca: a varredura continua de onde parou, sem repetir ninguém).
+ * busca a próxima leva (mesma busca: a varredura continua de onde parou; empresas novas primeiro,
+ * e se faltar a busca completa com as que já apareceram).
  */
 export function NextBatch({ input, sweeps, regional }: { input: SearchInput; sweeps: SweepLine[]; regional: boolean }) {
   const { run, progress, pending } = useSearchRunner();
@@ -20,7 +21,7 @@ export function NextBatch({ input, sweeps, regional }: { input: SearchInput; swe
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <ul className="flex min-w-0 flex-1 flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
           {regional ? (
-            <li>Busca geral: cada nova busca segue por outras cidades, sem repetir empresa.</li>
+            <li>Busca geral: cada nova busca segue por outras cidades. Empresas novas primeiro; se faltar, voltam as que já apareceram.</li>
           ) : (
             sweeps.map((s) => (
               <li key={s.label + s.city} className="inline-flex items-center gap-1.5">
@@ -33,9 +34,10 @@ export function NextBatch({ input, sweeps, regional }: { input: SearchInput; swe
             ))
           )}
         </ul>
-        <Button size="sm" variant={allDone ? "outline" : "default"} disabled={pending || allDone} onClick={() => run(input)}>
-          {pending ? <Loader2 className="animate-spin" /> : allDone ? <CheckCircle2 /> : <ArrowRight />}
-          {allDone ? "Cidade toda varrida" : `Próximas ${input.limit}`}
+        {/* cidade toda varrida: a busca volta com as que já apareceram (nada se perde) */}
+        <Button size="sm" variant={allDone ? "outline" : "default"} disabled={pending} onClick={() => run(input)}>
+          {pending ? <Loader2 className="animate-spin" /> : allDone ? <RotateCcw /> : <ArrowRight />}
+          {allDone ? "Ver de novo" : `Próximas ${input.limit}`}
         </Button>
       </div>
       {progress && <SearchProgressBar progress={progress} label="Buscando a próxima leva" />}

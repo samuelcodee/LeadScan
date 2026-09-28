@@ -50,7 +50,7 @@ export function ibgeFor(city: string, uf: string) {
 }
 
 /* Cache em memória por instância: poucos MB, e cada arquivo é lido uma vez por instância. */
-const MAX_SHARDS = 120;
+const MAX_SHARDS = 240;
 const g = globalThis as unknown as { __osmShards?: Map<string, Promise<Shard | null>> };
 const shards: Map<string, Promise<Shard | null>> = (g.__osmShards ??= new Map());
 
@@ -95,6 +95,11 @@ function loadIndex(): Promise<Index | null> {
     return ix;
   });
   return gi.__osmIndex;
+}
+
+/** Quantas empresas há por estado e categoria (UF → categoria → n), sem abrir arquivo nenhum. */
+export async function datasetCounts() {
+  return (await loadIndex())?.counts ?? null;
 }
 
 export async function loadShard(uf: string, slug: string): Promise<Shard | null> {

@@ -85,6 +85,11 @@ export interface DataProvider {
    * A busca geral percorre só elas (sem consultar milhares de cidades vazias).
    */
   regionCities?(uf: string | undefined, categories: string[]): Promise<Map<string, number> | null>;
+  /**
+   * Opcional: quantas empresas há por estado e categoria (UF → categoria → n). Busca sem
+   * categoria ("vários negócios") sorteia só combinações que existem.
+   */
+  categoryCounts?(): Promise<Record<string, Record<string, number>> | null>;
 }
 
 export type SweepPage = {

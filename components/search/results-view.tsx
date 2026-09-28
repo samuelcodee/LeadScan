@@ -27,12 +27,15 @@ export function ResultsView({
   initialFilters,
   initialSelected,
   aiEnabled,
+  since,
 }: {
   leads: LeadListItem[];
   initialFilters: SearchFilters;
   /** Lead vindo da URL (?lead=). Sem ele, telas largas pré-selecionam o melhor lead. */
   initialSelected: string | null;
   aiEnabled: boolean;
+  /** Início da busca: lead criado antes disso já tinha aparecido em outra busca */
+  since?: Date;
 }) {
   const router = useRouter();
   const params = useSearchParams();
@@ -47,6 +50,8 @@ export function ResultsView({
   const wide = useMediaQuery("(min-width: 1280px)");
   // No desktop o painel já abre no lead de maior potencial; no celular, só quando o usuário toca.
   const selectedId = pickedId ?? (wide ? initialLeads[0]?.id ?? null : null);
+  const isRepeat = (l: LeadListItem) => !!since && new Date(l.createdAt).getTime() < new Date(since).getTime();
+  const repeats = since ? leads.filter(isRepeat).length : 0;
 
   // Mantém a lista em dia quando o servidor revalida (salvar, status etc.)
   const [prevInitial, setPrevInitial] = useState(initialLeads);
@@ -196,7 +201,8 @@ export function ResultsView({
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-muted-foreground" aria-live="polite">
             <span className="font-semibold text-foreground tabular">{formatInt(filtered.length)}</span> de {formatInt(leads.length)} leads
-            {nActive > 0 && " com os filtros"} · ordenados por {sort === "score" ? "potencial" : sort === "reviews" ? "avaliações" : "nome"}
+            {nActive > 0 && " com os filtros"}
+            {repeats > 0 && ` · ${formatInt(repeats)} já ${repeats === 1 ? "apareceu" : "apareceram"}`} · ordenados por {sort === "score" ? "potencial" : sort === "reviews" ? "avaliações" : "nome"}
           </p>
           <div className="flex items-center gap-2">
             <Select value={sort} onValueChange={(v) => setSort(v as Sort)}>
@@ -231,6 +237,7 @@ export function ResultsView({
                 onSelect={() => select(l.id)}
                 onCreatePrototype={() => createPrototype(l)}
                 creating={creatingId === l.id}
+                repeat={isRepeat(l)}
               />
             ))}
           </div>

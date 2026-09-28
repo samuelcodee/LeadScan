@@ -4,7 +4,7 @@ import { Check, ChevronDown, Globe2, Loader2, MapPin, Search, SlidersHorizontal,
 import { useDeferredValue, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { SearchProgressBar } from "@/components/search/progress";
-import { useSearchRunner } from "@/components/search/use-search-runner";
+import { useSearchRunner, type SearchInput } from "@/components/search/use-search-runner";
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
@@ -41,23 +41,28 @@ export function SearchForm({
   providers,
   defaultProvider,
   initialQuery = "",
+  initial,
   compact,
 }: {
   providers: ProviderOption[];
   defaultProvider: ProviderId;
   initialQuery?: string;
+  /** Parâmetros da busca aberta (tela de resultados): o formulário volta exatamente como foi */
+  initial?: SearchInput;
   compact?: boolean;
 }) {
   const [text, setText] = useState(initialQuery);
-  const [categories, setCategories] = useState<string[]>([]);
-  const [cities, setCities] = useState<City[]>([]);
-  const [uf, setUf] = useState<string>("");
-  const [limit, setLimit] = useState<number>(50);
-  const [provider, setProvider] = useState<ProviderId>(defaultProvider);
+  const [categories, setCategories] = useState<string[]>(initial?.categories ?? []);
+  const [cities, setCities] = useState<City[]>(initial?.cities ?? []);
+  const [uf, setUf] = useState<string>(initial?.uf ?? initial?.cities[0]?.uf ?? "");
+  const [limit, setLimit] = useState<number>(initial?.limit ?? 50);
+  const [provider, setProvider] = useState<ProviderId>(initial?.provider ?? defaultProvider);
   const [filters, setFilters] = useState<Partial<SearchFilters>>({});
   const [advanced, setAdvanced] = useState(!compact);
   const { run, progress, pending } = useSearchRunner();
   const parsedOnce = useRef(false);
+  // Frase já interpretada (a do formulário pré-preenchido não é lida de novo por cima dos parâmetros)
+  const lastParsed = useRef(initial ? initialQuery : "");
   // Cursor já no campo só com mouse: no celular o teclado subia sozinho e cobria metade da tela
   const queryInput = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -105,7 +110,8 @@ export function SearchForm({
     if (p.limit) setLimit(p.limit);
     setFilters(p.filters);
     if (p.freeCity && !p.city) {
-      void resolveRemote(p.freeCity).then((c) => {
+      // Com a UF na frase ("Alvorada - RS"): existe Alvorada em RS e em TO
+      void resolveRemote(p.freeCity, p.uf ?? undefined).then((c) => {
         if (!c) return;
         setCities((x) => [c, ...x.slice(1).filter((y) => y.name !== c.name)]);
         setUf(c.uf);
@@ -117,14 +123,20 @@ export function SearchForm({
   const onParse = useEffectEvent((value: string) => applyParse(value));
 
   useEffect(() => {
-    if (initialQuery && !parsedOnce.current) {
+    if (initialQuery && !parsedOnce.current && !lastParsed.current) {
       parsedOnce.current = true;
+      lastParsed.current = initialQuery;
       onParse(initialQuery);
     }
   }, [initialQuery]);
 
   useEffect(() => {
-    const t = setTimeout(() => text.trim().length > 3 && onParse(text), 250);
+    if (text === lastParsed.current) return;
+    const t = setTimeout(() => {
+      if (text.trim().length <= 3) return;
+      lastParsed.current = text;
+      onParse(text);
+    }, 250);
     return () => clearTimeout(t);
   }, [text]);
 
@@ -154,14 +166,13 @@ export function SearchForm({
 
   const submit = (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (!categories.length) return void toast.error("Diga o tipo de negócio. Ex.: “dentistas”, “barbearias”.");
-
+    // Sem categoria = vários tipos de negócio (a busca sorteia categorias e cidades)
     run({ query: text || undefined, categories, cities, uf: uf || undefined, limit, provider }, filters);
   };
 
   const activeProvider = providers.find((p) => p.id === provider);
   const hint = providerHint(activeProvider, providers.some((p) => p.id === "google" && p.configured));
-  const understood = categories.length > 0 || cities.length > 0;
+  const understood = categories.length > 0 || cities.length > 0 || !!uf || text.trim().length > 3;
   const regionText = uf ? `${getState(uf)?.name ?? uf} · todas as cidades` : "Todo o Brasil";
 
   return (
@@ -220,7 +231,8 @@ export function SearchForm({
               <MapPin className="size-3" /> {c.name} - {c.uf}
             </Chip>
           ))}
-          {cities.length === 0 && categories.length > 0 && (
+          {categories.length === 0 && <Chip>Vários tipos de negócio</Chip>}
+          {cities.length === 0 && (
             <Chip>
               <Globe2 className="size-3" /> {regionText}
             </Chip>
@@ -351,7 +363,7 @@ function liftOnTouch(e: React.MouseEvent<HTMLElement>) {
 
 function CategoryPicker({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
   const [open, setOpen] = useState(false);
-  const label = value.length === 0 ? "Escolher…" : value.length === 1 ? getCategory(value[0]).plural : `${value.length} categorias`;
+  const label = value.length === 0 ? "Todos os tipos" : value.length === 1 ? getCategory(value[0]).plural : `${value.length} categorias`;
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -365,6 +377,19 @@ function CategoryPicker({ value, onChange }: { value: string[]; onChange: (v: st
           <CommandInput placeholder="Filtrar categorias…" />
           <CommandList className={PICKER_LIST}>
             <CommandEmpty>Nenhuma categoria.</CommandEmpty>
+            <CommandGroup>
+              <CommandItem
+                value="__todos todos os tipos varios negocios"
+                onSelect={() => {
+                  onChange([]);
+                  setOpen(false);
+                }}
+              >
+                <Globe2 className="text-muted-foreground" />
+                <span className="flex-1">Todos os tipos (busca variada)</span>
+                {value.length === 0 && <Check className="size-4" />}
+              </CommandItem>
+            </CommandGroup>
             <CommandGroup>
               {CATEGORIES.map((c) => {
                 const on = value.includes(c.slug);

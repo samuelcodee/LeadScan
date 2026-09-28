@@ -4,7 +4,7 @@ import ibgeCodes from "@/lib/domain/data/municipios-ibge.json";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { cachedProviderCall } from "@/lib/providers/cache";
-import { citiesWithData, datasetBusinesses } from "@/lib/providers/osm-dataset";
+import { citiesWithData, datasetBusinesses, datasetCounts } from "@/lib/providers/osm-dataset";
 import { ProviderError, type DataProvider, type ProviderBusiness, type ProviderQuery, type SweepPage } from "@/lib/providers/types";
 import { hashKey } from "@/lib/hash";
 import { STATES } from "@/lib/domain/geo";
@@ -260,8 +260,8 @@ export const osmProvider: DataProvider = {
   cacheTtlMs: 0,
   minIntervalMs: 0,
   maxAttempts: 1,
-  // leitura local: várias cidades ao mesmo tempo sem fila
-  concurrency: 12,
+  // leitura local: várias cidades ao mesmo tempo sem fila (a rodada grava tudo numa leva só)
+  concurrency: 20,
   isConfigured: () => true,
   async search(q, signal) {
     return (await cityBusinesses(q, signal)).slice(0, q.limit);
@@ -281,6 +281,7 @@ export const osmProvider: DataProvider = {
     for (const m of maps) for (const [k, v] of m) all.set(k, v);
     return all;
   },
+  categoryCounts: () => datasetCounts(),
 };
 
 /** Uma consulta com rodízio de servidores dentro do prazo. Erro claro se nenhum responder. */

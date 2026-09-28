@@ -17,7 +17,8 @@ export const filtersSchema = z.object({
 /** Requisição à fonte de dados (o que custa chamada de API). */
 export const searchRequestSchema = z.object({
   query: z.string().max(300).optional(),
-  categories: z.array(z.string().min(1).max(40)).min(1, "Escolha ao menos uma categoria.").max(5),
+  /** Vazio = vários tipos de negócio (a busca sorteia categorias e cidades). */
+  categories: z.array(z.string().min(1).max(40)).max(5).default([]),
   /** Vazio = busca geral: todas as cidades da UF escolhida (ou do Brasil, sem UF). */
   cities: z
     .array(z.object({ name: z.string().trim().min(2).max(60), uf: z.string().length(2).toUpperCase() }))

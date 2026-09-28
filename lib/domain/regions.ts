@@ -5,7 +5,7 @@ import { citiesOfState } from "@/lib/domain/municipalities";
 type Place = { name: string; uf: string };
 
 /** PRNG com seed (mulberry32): a mesma busca sempre percorre as mesmas cidades. */
-function rng(seed: string) {
+export function rng(seed: string) {
   let a = 2166136261;
   for (let i = 0; i < seed.length; i++) a = Math.imul(a ^ seed.charCodeAt(i), 16777619);
   return () => {
@@ -16,7 +16,7 @@ function rng(seed: string) {
   };
 }
 
-function shuffle<T>(list: T[], r: () => number) {
+export function shuffle<T>(list: T[], r: () => number) {
   const a = [...list];
   for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(r() * (i + 1));
@@ -76,4 +76,11 @@ export function regionCities(uf: string | undefined, seed: string, max: number):
 export function regionLabel(uf?: string) {
   const s = uf ? getState(uf) : undefined;
   return s ? `${s.name} (todas as cidades)` : "Todo o Brasil";
+}
+
+/** Intercala listas (um item de cada por vez): a primeira leva de consultas já sai variada. */
+export function interleave<T>(lists: T[][]): T[] {
+  const out: T[] = [];
+  for (let i = 0; lists.some((l) => i < l.length); i++) for (const l of lists) if (i < l.length) out.push(l[i]);
+  return out;
 }

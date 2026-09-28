@@ -5,6 +5,7 @@ import { Clock } from "lucide-react";
 import { NextBatch } from "@/components/search/next-batch";
 import { ResultsView } from "@/components/search/results-view";
 import { SearchForm } from "@/components/search/search-form";
+import type { SearchInput } from "@/components/search/use-search-runner";
 import { isAIEnabled } from "@/lib/ai";
 import { requireUser } from "@/lib/auth/session";
 import { filtersFromParams, searchRequestSchema } from "@/lib/domain/search";
@@ -23,11 +24,12 @@ export default async function SearchPage(props: PageProps<"/search">) {
   const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
   const searchId = one(sp.s);
   const providers = listProviders().map((p) => ({ id: p.id, label: p.label, configured: p.configured, isDemo: p.isDemo }));
-  const form = (query?: string) => (
+  const form = (query?: string, initial?: SearchInput) => (
     <SearchForm
       providers={providers}
       defaultProvider={defaultProviderId()}
       initialQuery={query ?? one(sp.q) ?? ""}
+      initial={initial}
       compact={!!searchId}
     />
   );
@@ -92,9 +94,9 @@ export default async function SearchPage(props: PageProps<"/search">) {
         </div>
         {result.search.error && <p className="mb-3 rounded-md bg-warning-soft px-3 py-2 text-sm text-warning">{result.search.error}</p>}
         {nextBatch}
-        {form(result.search.query ?? undefined)}
+        {form(result.search.query ?? undefined, again.success ? { ...again.data, provider: again.data.provider ?? defaultProviderId() } : undefined)}
       </div>
-      <ResultsView key={result.search.id} leads={result.leads} initialFilters={filtersFromParams(sp)} initialSelected={one(sp.lead) ?? null} aiEnabled={aiEnabled} />
+      <ResultsView key={result.search.id} leads={result.leads} since={result.search.createdAt} initialFilters={filtersFromParams(sp)} initialSelected={one(sp.lead) ?? null} aiEnabled={aiEnabled} />
       {/* celular: a próxima leva também no fim da lista (sem rolar 50 cards de volta ao topo) */}
       {nextBatch && result.leads.length > 0 && <div className="px-4 pb-6 lg:hidden">{nextBatch}</div>}
     </div>

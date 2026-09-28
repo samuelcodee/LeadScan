@@ -118,27 +118,39 @@ export async function backfillDedupeKeys(userId: string) {
   return rows.length;
 }
 
-/**
- * Tira da lista o que o usuário já tem (qualquer busca anterior, qualquer fonte):
- * mesmo id na fonte, mesmo nome na mesma cidade ou, em dados reais, mesmo telefone.
- */
-export async function excludeKnown(userId: string, items: ProviderBusiness[], opts: { usePhone: boolean; uniqueNames?: boolean; seen: Set<string> }) {
-  if (items.length === 0) return { fresh: items, known: 0 };
+/** O que o usuário já tem entre estes itens, como marcas x:id / k:nome|cidade|UF / p:telefone (uma consulta). */
+export async function knownMarks(userId: string, items: ProviderBusiness[], usePhone: boolean) {
+  if (items.length === 0) return new Set<string>();
   const keyOf = (b: ProviderBusiness) => leadDedupeKey(b.name, b.city, b.state);
-  const phoneOf = (b: ProviderBusiness) => (opts.usePhone ? normalizeBrazilPhone(b.phone)?.e164 : undefined);
-  const phones = [...new Set(items.map(phoneOf).filter((p): p is string => !!p))];
+  const phones = usePhone ? [...new Set(items.map((b) => normalizeBrazilPhone(b.phone)?.e164).filter((p): p is string => !!p))] : [];
   const rows = await db.lead.findMany({
     where: {
       userId,
       OR: [
-        { externalId: { in: items.map((i) => i.externalId) } },
+        { externalId: { in: [...new Set(items.map((i) => i.externalId))] } },
         { dedupeKey: { in: [...new Set(items.map(keyOf))] } },
         ...(phones.length ? [{ phone: { in: phones } }] : []),
       ],
     },
     select: { externalId: true, dedupeKey: true, phone: true },
   });
-  const have = new Set(rows.flatMap((r) => [`x:${r.externalId}`, `k:${r.dedupeKey}`, ...(r.phone ? [`p:${r.phone}`] : [])]));
+  return new Set(rows.flatMap((r) => [`x:${r.externalId}`, `k:${r.dedupeKey}`, ...(r.phone ? [`p:${r.phone}`] : [])]));
+}
+
+/**
+ * Tira da lista o que o usuário já tem (qualquer busca anterior, qualquer fonte):
+ * mesmo id na fonte, mesmo nome na mesma cidade ou, em dados reais, mesmo telefone.
+ */
+export async function excludeKnown(
+  userId: string,
+  items: ProviderBusiness[],
+  /** have: marcas já consultadas (knownMarks) para estes itens — a busca consulta a rodada inteira de uma vez */
+  opts: { usePhone: boolean; uniqueNames?: boolean; seen: Set<string>; have?: Set<string> },
+) {
+  if (items.length === 0) return { fresh: items, known: 0 };
+  const keyOf = (b: ProviderBusiness) => leadDedupeKey(b.name, b.city, b.state);
+  const phoneOf = (b: ProviderBusiness) => (opts.usePhone ? normalizeBrazilPhone(b.phone)?.e164 : undefined);
+  const have = opts.have ?? (await knownMarks(userId, items, opts.usePhone));
   let known = 0;
   const fresh = items.filter((b) => {
     const marks = [`x:${b.externalId}`, `k:${keyOf(b)}`];
@@ -156,6 +168,24 @@ export async function excludeKnown(userId: string, items: ProviderBusiness[], op
     return true;
   });
   return { fresh, known };
+}
+
+/**
+ * Empresas novas de uma rodada da busca (já passaram por excludeKnown), de várias categorias
+ * e cidades: grava todas e devolve { id, score } em duas consultas, seja 1 cidade ou 20.
+ */
+export async function insertNewLeads(opts: { userId: string; provider: string; isDemo: boolean; items: { item: ProviderBusiness; category: string }[] }) {
+  const { userId, provider, isDemo, items } = opts;
+  if (items.length === 0) return [];
+  const created = await db.lead.createManyAndReturn({
+    data: items.map(({ item, category }) => ({ userId, provider, externalId: item.externalId, isDemo, ...toLeadData(item, category) })),
+    skipDuplicates: true,
+    select: { id: true, score: true },
+  });
+  if (created.length) {
+    await db.leadEvent.createMany({ data: created.map((r) => ({ leadId: r.id, userId, type: "FOUND" as const, meta: { provider } })) });
+  }
+  return created;
 }
 
 /** LGPD: remove empresas que pediram para não ser contatadas. */
@@ -188,22 +218,9 @@ export async function upsertLeads(opts: {
   isDemo: boolean;
   category: string;
   items: ProviderBusiness[];
-  /** Já passaram por excludeKnown (nenhum existe para o usuário): grava e devolve numa consulta só */
-  allNew?: boolean;
 }) {
   const { userId, provider, isDemo, category, items } = opts;
   if (items.length === 0) return [];
-  if (opts.allNew) {
-    const created = await db.lead.createManyAndReturn({
-      data: items.map((i) => ({ userId, provider, externalId: i.externalId, isDemo, ...toLeadData(i, category) })),
-      skipDuplicates: true,
-      select: { id: true, score: true },
-    });
-    if (created.length) {
-      await db.leadEvent.createMany({ data: created.map((r) => ({ leadId: r.id, userId, type: "FOUND" as const, meta: { provider } })) });
-    }
-    return created;
-  }
   const externalIds = items.map((i) => i.externalId);
   const existing = await db.lead.findMany({
     where: { userId, provider, externalId: { in: externalIds } },

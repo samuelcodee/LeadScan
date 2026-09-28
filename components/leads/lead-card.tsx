@@ -1,6 +1,6 @@
 "use client";
 
-import { Globe, MapPin, MessageCircle, Star } from "lucide-react";
+import { Globe, History, MapPin, MessageCircle, Star } from "lucide-react";
 import { Instagram } from "@/components/icons";
 import { warnDemoLink } from "@/components/leads/presence-icons";
 import { DemoBadge } from "@/components/common/page-header";
@@ -70,12 +70,15 @@ export function LeadCard({
   onSelect,
   onCreatePrototype,
   creating,
+  repeat,
 }: {
   lead: LeadListItem;
   selected?: boolean;
   onSelect: () => void;
   onCreatePrototype: () => void;
   creating?: boolean;
+  /** Já tinha aparecido numa busca anterior (a busca completou com ele por faltar empresa nova) */
+  repeat?: boolean;
 }) {
   const site = classifyWebsite(lead.website);
   const noOwnSite = site.kind !== "own" && site.kind !== "free-builder";
@@ -133,6 +136,12 @@ export function LeadCard({
       </div>
       <div className="flex flex-wrap items-center gap-2 border-t px-3 py-2.5">
         {lead.isDemo && <DemoBadge />}
+        {repeat && (
+          <span className="inline-flex h-5 items-center gap-1 rounded bg-muted px-1.5 text-[11px] font-medium text-muted-foreground" title="Esta empresa já tinha aparecido numa busca anterior">
+            <History className="size-3" aria-hidden />
+            Já apareceu
+          </span>
+        )}
         {lead.status !== "NEW" && (
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <StatusDot status={lead.status} />
