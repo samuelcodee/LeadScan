@@ -11,17 +11,38 @@ import { env } from "@/lib/env";
  */
 let key: Buffer | null = null;
 
+/**
+ * Aceita a chave em qualquer formato comum, porque quem configura cola o que o gerador deu:
+ *  - 32 bytes em base64 / base64url (openssl rand -base64 32) → usada como está (formato original);
+ *  - 64 caracteres hex (openssl rand -hex 32) → os 32 bytes;
+ *  - qualquer outro texto forte (≥ 16 caracteres) → chave derivada dele (HKDF).
+ * Antes, um valor fora do 1º formato derrubava toda gravação criptografada (conectar Mercado
+ * Pago, contas bancárias, IAs) — como nunca gravou nada com ele, derivar não perde dado.
+ * Sem ENCRYPTION_KEY em produção, deriva de AUTH_SECRET (trocar AUTH_SECRET invalida os segredos).
+ */
+export function keyFromSetting(raw: string, fallback: string): { key: Buffer; source: "base64" | "hex" | "derivada" | "auth" } {
+  const v = raw.trim();
+  if (v) {
+    if (/^[0-9a-f]{64}$/i.test(v)) return { key: Buffer.from(v, "hex"), source: "hex" };
+    if (/^[A-Za-z0-9+/_-]+={0,2}$/.test(v)) {
+      const b = Buffer.from(v.replace(/-/g, "+").replace(/_/g, "/"), "base64");
+      if (b.length === 32) return { key: b, source: "base64" };
+    }
+    if (v.length >= 16) return { key: Buffer.from(hkdfSync("sha256", v, "leadsite", "secrets-key-v1", 32)), source: "derivada" };
+  }
+  return { key: Buffer.from(hkdfSync("sha256", fallback, "leadsite", "secrets-v1", 32)), source: "auth" };
+}
+
 function encryptionKey(): Buffer {
   if (key) return key;
   const e = env();
-  if (e.ENCRYPTION_KEY) {
-    const k = Buffer.from(e.ENCRYPTION_KEY, "base64");
-    if (k.length !== 32) throw new Error("ENCRYPTION_KEY precisa ter 32 bytes em base64 (openssl rand -base64 32).");
-    return (key = k);
+  const fallback = e.AUTH_SECRET || (e.NODE_ENV === "production" ? "" : "leadsite-dev-only-insecure-secret");
+  if (!e.ENCRYPTION_KEY.trim() && !fallback) throw new Error("Defina ENCRYPTION_KEY em produção.");
+  const k = keyFromSetting(e.ENCRYPTION_KEY, fallback);
+  if (e.NODE_ENV === "production" && k.source !== "base64" && k.source !== "hex") {
+    console.warn(`[segredos] ENCRYPTION_KEY ${k.source === "auth" ? "ausente: usando chave derivada de AUTH_SECRET" : "fora do formato base64 de 32 bytes: usando chave derivada dela"}`);
   }
-  if (e.NODE_ENV === "production") throw new Error("Defina ENCRYPTION_KEY em produção.");
-  const base = e.AUTH_SECRET || "leadsite-dev-only-insecure-secret";
-  return (key = Buffer.from(hkdfSync("sha256", base, "leadsite", "secrets-v1", 32)));
+  return (key = k.key);
 }
 
 export function encryptSecret(plain: string): string {
