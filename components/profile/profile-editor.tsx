@@ -234,7 +234,7 @@ function LinkContact({ channel, label, current }: { channel: "EMAIL" | "SMS"; la
             });
           }}
         >
-          <Input value={target} onChange={(e) => setTarget(e.target.value)} placeholder={channel === "EMAIL" ? "novo@email.com" : "(85) 99999-8888"} className="h-9" />
+          <Input value={target} onChange={(e) => setTarget(e.target.value)} placeholder={channel === "EMAIL" ? "novo@email.com" : "(85) 99999-8888"} className="h-9" aria-label={channel === "EMAIL" ? "Novo e-mail" : "Celular com DDD"} type={channel === "EMAIL" ? "email" : "tel"} inputMode={channel === "EMAIL" ? "email" : "tel"} />
           <Button type="submit" variant="outline" size="sm" className="h-9" disabled={pending || target.length < 5}>
             {current ? "Trocar" : "Vincular"}
           </Button>
@@ -320,7 +320,8 @@ export function AccountFields({ email, phone, google, isDemo }: { email: string 
                 start(async () => {
                   const r = await deleteAccount({ confirm: "EXCLUIR" });
                   if (!r.ok) return void toast.error(r.error);
-                  router.replace(r.data.redirect);
+                  // recarga completa: nada da conta apagada fica na tela (conexão ao vivo, cache do app)
+                  window.location.replace(r.data.redirect);
                 })
               }
             >

@@ -1,5 +1,7 @@
 "use server";
 
+import { getProvider } from "@/lib/providers";
+import type { ProviderId } from "@/lib/domain/filters";
 import { z } from "zod";
 import { action, idSchema } from "@/lib/action";
 import { db } from "@/lib/db";
@@ -16,7 +18,9 @@ export const startSearch = action({ name: "startSearch", schema: searchRequestSc
   // Grafia oficial do IBGE (acentos certos): as fontes de mapa casam o nome exato do município
   const req = { ...input, cities: input.cities.map((c) => ({ name: resolveMunicipality(c.name, c.uf).match?.name ?? c.name, uf: c.uf })) };
   const search = await createSearch(user.id, req);
-  if (search.total === 1) {
+  // Uma cidade, ou fonte local (base do Brasil, milissegundos por cidade): roda aqui mesmo e a
+  // tela abre direto nos resultados, sem fila nem espera de acompanhamento
+  if (search.total === 1 || getProvider(search.provider as ProviderId).regionCities) {
     await runSearchJob(search.id);
     const done = await db.search.findUniqueOrThrow({ where: { id: search.id }, select: { status: true, error: true } });
     return { searchId: search.id, status: done.status, error: done.error };

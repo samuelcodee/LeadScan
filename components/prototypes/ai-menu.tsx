@@ -55,7 +55,7 @@ export function AiMenu({ prototypeId, spec, ai, onSpec }: { prototypeId: string;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" disabled={pending}>
+        <Button variant="outline" disabled={pending} aria-label="Inteligência artificial" className="max-sm:size-10 max-sm:px-0">
           {pending ? <Loader2 className="animate-spin" /> : <Sparkles />} <span className="hidden sm:inline">IA</span>
         </Button>
       </DropdownMenuTrigger>

@@ -25,7 +25,7 @@ function providerHint(active: ProviderOption | undefined, googleReady: boolean) 
   if (!active) return null;
   if (active.isDemo) return "Fonte de demonstração: empresas fictícias, marcadas como DEMO. Troque para uma fonte real para prospectar de verdade.";
   if (active.id === "google") return "Google Maps: nota, avaliações, telefone e fotos. Cada busca continua de onde a anterior parou, até acabarem as empresas da cidade.";
-  const base = "OpenStreetMap: grátis, sem limite de uso. Cada busca continua de onde a anterior parou; cidade já consultada volta na hora.";
+  const base = "OpenStreetMap: grátis e em segundos (base do Brasil inteiro, por município). Cada busca continua de onde a anterior parou; sem avaliações do Google.";
   return googleReady ? `${base} Google Maps também está ligado (pago por consulta).` : base;
 }
 type City = { name: string; uf: string };

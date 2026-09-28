@@ -1,12 +1,28 @@
 import "server-only";
 import { db } from "@/lib/db";
-import { isDemoMode } from "@/lib/env";
+import { env, isDemoMode } from "@/lib/env";
 import { Prisma } from "@/lib/generated/prisma/client";
 import { getLevel, LEVELS, levelFor, type SalesStats } from "@/lib/gamification/levels";
 import { cachedClosedPodiums } from "@/lib/ranking/cached";
 
-/** Vendas que valem para nível: verificadas, não estornadas e com valor mínimo (points > 0). */
+/**
+ * Vendas que valem para NÍVEL: verificadas, não estornadas e a partir do valor mínimo
+ * (RANKING_MIN_SALE_CENTS). Níveis ficam protegidos de cobranças pequenas; o ranking e o
+ * faturamento mostrado no perfil contam tudo (verifiedTotals).
+ */
 export async function salesStats(userId: string): Promise<SalesStats> {
+  const demo = isDemoMode();
+  const [row] = await db.$queryRaw<{ sales: bigint; revenue: bigint | null; months: bigint }[]>`
+    SELECT COUNT(*) AS sales, SUM(s."amountCents") AS revenue,
+           COUNT(DISTINCT to_char((s."closedAt" AT TIME ZONE 'UTC') AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM')) AS months
+    FROM "Sale" s
+    WHERE s."userId" = ${userId} AND s.verified = true AND s."refundedAt" IS NULL AND s."amountCents" >= ${env().RANKING_MIN_SALE_CENTS}
+      ${demo ? Prisma.empty : Prisma.sql`AND s."isTest" = false`}`;
+  return { sales: Number(row?.sales ?? 0), revenueCents: Number(row?.revenue ?? 0), activeMonths: Number(row?.months ?? 0) };
+}
+
+/** Tudo que foi pago pela plataforma (qualquer valor): o que o perfil mostra em "vendas verificadas". */
+export async function verifiedTotals(userId: string): Promise<SalesStats> {
   const demo = isDemoMode();
   const [row] = await db.$queryRaw<{ sales: bigint; revenue: bigint | null; months: bigint }[]>`
     SELECT COUNT(*) AS sales, SUM(s."amountCents") AS revenue,

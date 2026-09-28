@@ -47,13 +47,26 @@ function DialogOverlay({
   )
 }
 
+/**
+ * Toque fora NÃO fecha no celular: com o teclado aberto, tocar em qualquer lugar para baixá-lo
+ * fechava a janela e o formulário se perdia. `persistent` faz o mesmo também no computador
+ * (formulários longos, como a cobrança). Fechar continua no X e no Esc.
+ */
+function guardOutside(persistent: boolean | undefined, e: Event) {
+  if (persistent || window.matchMedia("(pointer: coarse)").matches) e.preventDefault()
+}
+
 function DialogContent({
   className,
   children,
   showCloseButton = true,
+  persistent,
+  onPointerDownOutside,
+  onInteractOutside,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
+  persistent?: boolean
 }) {
   return (
     <DialogPortal>
@@ -61,9 +74,18 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          // max-h + rolagem: formulário alto (ou teclado aberto) rola dentro da janela
+          "fixed top-1/2 left-1/2 z-50 grid max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto overscroll-contain rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
           className
         )}
+        onPointerDownOutside={(e) => {
+          onPointerDownOutside?.(e)
+          guardOutside(persistent, e)
+        }}
+        onInteractOutside={(e) => {
+          onInteractOutside?.(e)
+          guardOutside(persistent, e)
+        }}
         {...props}
       >
         {children}
@@ -76,7 +98,7 @@ function DialogContent({
             >
               <XIcon
               />
-              <span className="sr-only">Close</span>
+              <span className="sr-only">Fechar</span>
             </Button>
           </DialogPrimitive.Close>
         )}

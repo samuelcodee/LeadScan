@@ -40,7 +40,10 @@ describe("pontos do ranking", () => {
   it("100 por venda + 1 a cada R$ 10, com teto", () => {
     expect(pointsForSale(150000, 10000)).toBe(250);
     expect(pointsForSale(25_000_00, 10000)).toBe(1100);
-    expect(pointsForSale(99_00, 10000)).toBe(0); // abaixo do mínimo
+    // abaixo do mínimo: conta, sem o bônus de 100
+    expect(pointsForSale(99_00, 10000)).toBe(9);
+    expect(pointsForSale(5_00, 10000)).toBe(1);
+    expect(pointsForSale(0, 10000)).toBe(0);
   });
 
   it("desempate: pontos → faturamento → quem chegou antes", () => {

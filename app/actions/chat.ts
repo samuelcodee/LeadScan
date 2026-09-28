@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { action, idSchema } from "@/lib/action";
-import { deleteMessage, editMessage, markRead, MAX_TEXT, openConversation, sendMessage, setInbox } from "@/lib/chat/service";
+import { deleteMessage, editMessage, hideMessage, markRead, MAX_TEXT, openConversation, sendMessage, setInbox } from "@/lib/chat/service";
 import { setBlock } from "@/lib/social/friends";
 
 export const startConversation = action(
@@ -25,6 +25,11 @@ export const markConversationRead = action(
 
 export const deleteChatMessage = action({ name: "deleteChatMessage", schema: z.object({ messageId: idSchema }), limit: "chat" }, async ({ messageId }, user) => {
   await deleteMessage(user.id, messageId);
+  return { ok: true };
+});
+
+export const hideChatMessage = action({ name: "hideChatMessage", schema: z.object({ messageId: idSchema }), limit: "chat" }, async ({ messageId }, user) => {
+  await hideMessage(user.id, messageId);
   return { ok: true };
 });
 

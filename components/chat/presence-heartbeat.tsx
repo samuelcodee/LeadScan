@@ -66,6 +66,31 @@ export function PresenceHeartbeat({ initialUnread }: { initialUnread: number }) 
     [router],
   );
 
+  // Ranking ao vivo: ultrapassagens e a própria venda confirmada, em qualquer tela
+  useEffect(
+    () =>
+      subscribeLive((e) => {
+        if (e.type === "rank" && e.position) {
+          const where = e.period === "month" ? "do mês" : "da semana";
+          if (e.kind === "up") {
+            const more = (e.count ?? 1) > 1 ? ` e mais ${(e.count ?? 1) - 1}` : "";
+            toast.success(`Você passou ${e.other}${more}: agora está em ${e.position}º no ranking ${where}.`, {
+              action: { label: "Ver ranking", onClick: () => router.push(e.period === "month" ? "/comunidade?periodo=mes" : "/comunidade") },
+            });
+          } else {
+            toast(`${e.other} passou você no ranking ${where}. Você está em ${e.position}º.`, {
+              action: { label: "Ver ranking", onClick: () => router.push(e.period === "month" ? "/comunidade?periodo=mes" : "/comunidade") },
+            });
+          }
+        }
+        // Venda própria confirmada fora do Financeiro (lá o próprio painel já avisa)
+        if (e.type === "sale" && e.scope === "me" && e.mine && (e.points ?? 0) > 0 && !pathRef.current.startsWith("/financeiro")) {
+          toast.success(`Pagamento confirmado. +${e.points} pontos no ranking.`, { action: { label: "Ver", onClick: () => router.push("/financeiro") } });
+        }
+      }),
+    [router],
+  );
+
   // (2) no título da aba enquanto houver não lidas. O Next reescreve o título a cada
   // navegação, então um observador reaplica o prefixo quando o <title> muda.
   useEffect(() => {

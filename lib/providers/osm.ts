@@ -3,7 +3,11 @@ import { getCategory } from "@/lib/domain/categories";
 import ibgeCodes from "@/lib/domain/data/municipios-ibge.json";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
-import { ProviderError, type DataProvider, type ProviderBusiness, type ProviderQuery } from "@/lib/providers/types";
+import { cachedProviderCall } from "@/lib/providers/cache";
+import { citiesWithData, datasetBusinesses } from "@/lib/providers/osm-dataset";
+import { ProviderError, type DataProvider, type ProviderBusiness, type ProviderQuery, type SweepPage } from "@/lib/providers/types";
+import { hashKey } from "@/lib/hash";
+import { STATES } from "@/lib/domain/geo";
 import { normalizeBrazilPhone, pickPhone } from "@/lib/whatsapp/phone";
 
 /**
@@ -179,6 +183,67 @@ function endpoints(hint = 0) {
 
 const isBackup = (url: string) => BACKUP_ENDPOINTS.includes(url);
 
+/** Tamanho de cada pedaço da varredura na base do Brasil (a cidade inteira já está no arquivo). */
+const DATASET_PAGE = 250;
+const LIVE_CACHE_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** Quem tem como ser contatado vem primeiro: telefone/WhatsApp, depois Instagram/site. */
+function contactRank(t: Record<string, string>) {
+  const phone = t.phone || t["contact:phone"] || t.mobile || t["contact:mobile"] || t.whatsapp || t["contact:whatsapp"];
+  return (phone ? 0 : 2) + (t.instagram || t["contact:instagram"] || t.website || t["contact:website"] ? 0 : 1);
+}
+
+function mapUnique(elements: OsmElement[], q: ProviderQuery) {
+  const seen = new Set<string>();
+  return elements
+    .map((el) => mapOsmElement(el, q))
+    .filter((b): b is ProviderBusiness => {
+      if (!b) return false;
+      const key = b.name.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+/** Cidade inteira da base do Brasil, ordenada por quem dá para contatar. null = sem base. */
+async function fromDataset(q: ProviderQuery) {
+  const els = await datasetBusinesses(q.category, q.city, q.uf);
+  if (!els) return null;
+  const sorted = els.map((el, i) => ({ el, i, r: contactRank(el.tags) })).sort((a, b) => a.r - b.r || a.i - b.i);
+  return mapUnique(sorted.map((x) => x.el as OsmElement), q);
+}
+
+/** Overpass ao vivo (reserva): cache de 30 dias no banco, compartilhado por todos. */
+async function liveSearch(q: ProviderQuery, signal?: AbortSignal) {
+  const key = hashKey("osm-live", q.category, q.city.toLowerCase(), q.uf);
+  return cachedProviderCall(key, "osm", LIVE_CACHE_MS, async () => {
+    const cat = getCategory(q.category);
+    const deadline = Date.now() + PER_CITY_MS;
+    const byCode = ibgeCode(q.city, q.uf) !== null;
+    let json = await overpass(buildOverpassQuery({ ...q, limit: 1000 }, cat.osm), q.hint, deadline, signal);
+    if (byCode && json && !json.elements?.some((e) => e.type === "area")) {
+      json = await overpass(buildOverpassQuery({ ...q, limit: 1000 }, cat.osm, { byName: true }), (q.hint ?? 0) + 1, deadline, signal);
+    }
+    return mapUnique(json?.elements ?? [], q);
+  });
+}
+
+/** A cidade toda: base do Brasil; se ela falhar (rede), o Overpass ao vivo. */
+async function cityBusinesses(q: ProviderQuery, signal?: AbortSignal) {
+  const cat = getCategory(q.category);
+  if (cat.osm.length === 0) throw new ProviderError(`O OpenStreetMap não cobre a categoria “${cat.plural}”. Tente outra fonte.`);
+  try {
+    const list = await fromDataset(q);
+    if (list) return list;
+  } catch (err) {
+    logger.warn("base OSM indisponível", { city: q.city, uf: q.uf, regional: !!q.regional, err: String(err) });
+    // Busca geral: melhor avisar já do que consultar o Overpass (lento) em dezenas de cidades
+    if (q.regional) throw new ProviderError("A base de empresas não carregou agora. Tente de novo em instantes.", true);
+  }
+  return liveSearch(q, signal);
+}
+
 export const osmProvider: DataProvider = {
   id: "osm",
   label: "OpenStreetMap",
@@ -191,37 +256,30 @@ export const osmProvider: DataProvider = {
     // a cidade inteira numa consulta: a varredura segue por ela até a última empresa
     maxResults: 1000,
   },
-  // OpenStreetMap muda devagar: 30 dias de cache (igual à volta da varredura). Cidade já consultada
-  // por qualquer pessoa sai na hora, sem esperar os servidores públicos.
-  cacheTtlMs: 30 * 24 * 60 * 60 * 1000,
-  minIntervalMs: 400,
-  // o rodízio de servidores já é a nova tentativa
+  // A base do Brasil já vem do próprio site (sem banco); o Overpass de reserva tem cache próprio.
+  cacheTtlMs: 0,
+  minIntervalMs: 0,
   maxAttempts: 1,
-  // 2 servidores públicos costumam estar de pé; mais que isso só enfileira neles
-  concurrency: 2,
+  // leitura local: várias cidades ao mesmo tempo sem fila
+  concurrency: 12,
   isConfigured: () => true,
   async search(q, signal) {
-    const cat = getCategory(q.category);
-    if (cat.osm.length === 0) {
-      throw new ProviderError(`O OpenStreetMap não cobre a categoria “${cat.plural}”. Tente outra fonte.`);
-    }
-    const deadline = Date.now() + PER_CITY_MS;
-    const byCode = ibgeCode(q.city, q.uf) !== null;
-    let json = await overpass(buildOverpassQuery(q, cat.osm), q.hint, deadline, signal);
-    if (byCode && json && !json.elements?.some((e) => e.type === "area")) {
-      json = await overpass(buildOverpassQuery(q, cat.osm, { byName: true }), (q.hint ?? 0) + 1, deadline, signal);
-    }
-    const seen = new Set<string>();
-    return (json?.elements ?? [])
-      .map((el) => mapOsmElement(el, q))
-      .filter((b): b is ProviderBusiness => {
-        if (!b) return false;
-        const key = b.name.toLowerCase();
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .slice(0, q.limit);
+    return (await cityBusinesses(q, signal)).slice(0, q.limit);
+  },
+  // Varredura em pedaços: a cidade inteira está na base; cada busca continua de onde parou
+  async sweep(q, cursor, signal): Promise<SweepPage> {
+    const all = await cityBusinesses(q, signal);
+    const offset = cursor && typeof cursor === "object" && "offset" in cursor ? Number((cursor as { offset: number }).offset) || 0 : 0;
+    const items = all.slice(offset, offset + DATASET_PAGE);
+    const next = offset + DATASET_PAGE < all.length ? { offset: offset + DATASET_PAGE } : null;
+    return { items, next };
+  },
+  async regionCities(uf, categories) {
+    const ufs = uf ? [uf.toUpperCase()] : STATES.map((s) => s.uf);
+    const maps = await Promise.all(ufs.map((u) => citiesWithData(u, categories)));
+    const all = new Map<string, number>();
+    for (const m of maps) for (const [k, v] of m) all.set(k, v);
+    return all;
   },
 };
 

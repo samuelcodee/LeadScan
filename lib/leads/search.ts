@@ -76,6 +76,8 @@ export function describeSearch(req: SearchRequest) {
 function regionBudget(provider: DataProvider) {
   if (provider.isDemo) return { maxCities: 40, spread: 10 };
   if (provider.id === "google") return { maxCities: 8, spread: 5 };
+  // Base do Brasil (OpenStreetMap): consulta local, dá para percorrer muitas cidades em segundos
+  if (provider.regionCities) return { maxCities: 400, spread: 12 };
   return { maxCities: 12, spread: 6 };
 }
 
@@ -106,7 +108,7 @@ function regionKey(userId: string, provider: string, req: SearchRequest): SweepK
 async function planTasks(userId: string, req: SearchRequest, provider: DataProvider) {
   if (req.cities.length) {
     // Cidade por cidade (todas as categorias de uma cidade antes de ir para a próxima)
-    return { tasks: req.cities.flatMap((city) => req.categories.map((category) => ({ category, city }))), rotation: null, regionDone: false };
+    return { tasks: req.cities.flatMap((city) => req.categories.map((category) => ({ category, city }))), rotation: null, regionDone: false, noData: false };
   }
   const done = await db.searchSweep.findMany({
     where: {
@@ -121,7 +123,16 @@ async function planTasks(userId: string, req: SearchRequest, provider: DataProvi
   });
   const doneSet = new Set(done.map((d) => `${d.category}|${d.city}|${d.state}`));
   const pending = (c: City) => req.categories.filter((cat) => !doneSet.has(`${cat}|${c.name}|${c.uf}`));
-  const open = regionOrder(req.uf, `${userId}|${req.uf ?? "BR"}`).filter((c) => pending(c).length > 0);
+  // Fonte que sabe onde há empresas (base do Brasil): só entram cidades com pelo menos uma
+  const withData = provider.regionCities ? await provider.regionCities(req.uf, req.categories).catch(() => null) : null;
+  let open = regionOrder(req.uf, `${userId}|${req.uf ?? "BR"}`).filter((c) => pending(c).length > 0 && (!withData || withData.has(`${c.name}|${c.uf}`)));
+  // Base local: cidades com mais empresas primeiro (menos cidades até completar 250/500);
+  // a ordem da região desempata, então cada pessoa ainda vê uma sequência própria
+  if (withData) {
+    const pos = new Map(open.map((c, i) => [`${c.name}|${c.uf}`, i]));
+    const size = (c: City) => withData.get(`${c.name}|${c.uf}`) ?? 0;
+    open = [...open].sort((a, b) => Math.min(size(b), 200) - Math.min(size(a), 200) || pos.get(`${a.name}|${a.uf}`)! - pos.get(`${b.name}|${b.uf}`)!);
+  }
   const key = regionKey(userId, provider.id, req);
   const region = await db.searchSweep.findUnique({ where: sweepWhere(key), select: { cursor: true } });
   const pos = Number((region?.cursor as { pos?: number } | null)?.pos ?? 0) || 0;
@@ -131,6 +142,8 @@ async function planTasks(userId: string, req: SearchRequest, provider: DataProvi
     tasks: picked.flatMap((city) => pending(city).map((category) => ({ category, city }))),
     rotation: { key, start },
     regionDone: open.length === 0,
+    /** A fonte sabe que não há nenhuma empresa dessas categorias na região */
+    noData: !!withData && withData.size === 0,
   };
 }
 
@@ -180,7 +193,7 @@ export async function runSearchJob(searchId: string) {
   const provider = resolved.provider;
   const quotaOut = resolved.quotaOut || (search.params as { quotaFallback?: boolean }).quotaFallback === true;
   const regional = req.cities.length === 0;
-  const { tasks, rotation, regionDone } = await planTasks(userId, req, provider);
+  const { tasks, rotation, regionDone, noData } = await planTasks(userId, req, provider);
   const { spread } = regionBudget(provider);
   const concurrency = Math.max(1, provider.concurrency ?? 2);
   const plural = (cat: string) => getCategory(cat).plural.toLowerCase();
@@ -205,9 +218,15 @@ export async function runSearchJob(searchId: string) {
 
   const top = () => [...new Map(collected.map((c) => [c.id, c])).values()].sort((a, b) => b.score - a.score).slice(0, req.limit);
 
+  // Onde cada cidade parou, numa consulta só (antes: uma por cidade)
+  const sweepRows = await db.searchSweep.findMany({
+    where: { userId, provider: provider.id, category: { in: req.categories }, ...(regional ? {} : { OR: req.cities.map((c) => ({ city: c.name, state: c.uf })) }) },
+  });
+  const sweeps = new Map(sweepRows.map((s) => [`${s.category}|${s.city}|${s.state}`, s]));
+
   const runTask = async (t: Task, index: number, quota: number) => {
     const key: SweepKey = { userId, provider: provider.id, category: t.category, city: t.city.name, state: t.city.uf };
-    const sweep = await db.searchSweep.findUnique({ where: sweepWhere(key) });
+    const sweep = sweeps.get(`${t.category}|${t.city.name}|${t.city.uf}`) ?? null;
     if (recentlyExhausted(sweep)) {
       alreadyDone.push(t);
       return;
@@ -218,7 +237,7 @@ export async function runSearchJob(searchId: string) {
     let exhausted = false;
     let failed = false;
     const fresh: ProviderBusiness[] = [];
-    const q: ProviderQuery = { category: t.category, city: t.city.name, uf: t.city.uf, limit: quota, hint: index };
+    const q: ProviderQuery = { category: t.category, city: t.city.name, uf: t.city.uf, limit: quota, hint: index, regional };
     try {
       for (let page = 0; page < MAX_PAGES_PER_TASK && fresh.length < quota; page++) {
         if (Date.now() - startedAt > JOB_BUDGET_MS) break;
@@ -246,7 +265,7 @@ export async function runSearchJob(searchId: string) {
       logger.warn("tarefa de busca falhou", { searchId, task: t, err: String(err) });
     }
     // O que achou antes de um erro fica; o cursor só anda pelos pedaços que deram certo
-    const rows = await upsertLeads({ userId, provider: provider.id, isDemo: provider.isDemo, category: t.category, items: fresh });
+    const rows = await upsertLeads({ userId, provider: provider.id, isDemo: provider.isDemo, category: t.category, items: fresh, allNew: true });
     collected.push(...rows);
     if (failed && fresh.length === 0 && cursor === startCursor) return;
     const json = (c: unknown) => (c === null || c === undefined ? Prisma.DbNull : (c as Prisma.InputJsonValue));
@@ -314,7 +333,8 @@ export async function runSearchJob(searchId: string) {
   }
   if (regional) {
     const cats = req.categories.map(plural).join(" e ");
-    if (regionDone) notes.push(`Varredura completa: você já percorreu todas as cidades ${req.uf ? `de ${req.uf}` : "do Brasil"} atrás de ${cats} ${source}.`);
+    if (noData) notes.push(`Não há ${cats} ${req.uf ? `em ${req.uf}` : "no Brasil"} na base do ${provider.label}. Tente outra categoria ou outro estado.`);
+    else if (regionDone) notes.push(`Varredura completa: você já percorreu todas as cidades ${req.uf ? `de ${req.uf}` : "do Brasil"} atrás de ${cats} ${source}.`);
     else if (finished.length) notes.push(`${finished.length} ${finished.length === 1 ? "cidade foi varrida" : "cidades foram varridas"} até o fim nesta busca. As próximas buscas seguem pelas outras.`);
   } else {
     for (const t of finished) {

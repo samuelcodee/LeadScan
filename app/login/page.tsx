@@ -11,7 +11,7 @@ import { loginChannels } from "@/lib/messaging";
 export const metadata: Metadata = { title: "Entrar ou criar conta" };
 
 export default async function LoginPage(props: PageProps<"/login">) {
-  const { next, erro, criar } = await props.searchParams;
+  const { next, erro, criar, conta } = await props.searchParams;
   const signup = criar === "1";
   const target = safeNext(next);
   const user = await getCurrentUser();
@@ -30,6 +30,11 @@ export default async function LoginPage(props: PageProps<"/login">) {
           <Logo boxed />
         </Link>
         <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center py-10">
+          {conta === "excluida" && (
+            <p className="mb-6 rounded-md border bg-muted/50 px-3 py-2.5 text-sm" role="status">
+              Sua conta e todos os dados foram excluídos. Se quiser voltar um dia, é só criar uma conta nova.
+            </p>
+          )}
           <h1 className="text-[28px] font-bold tracking-tight">{signup ? "Criar sua conta" : "Entrar ou criar conta"}</h1>
           <p className="mt-2 text-sm text-muted-foreground">
             {intro}

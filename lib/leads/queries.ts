@@ -54,7 +54,12 @@ export async function getSearchResults(userId: string, searchId: string) {
     : [];
   const order = new Map(search.leadIds.map((id, i) => [id, i]));
   leads.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
-  return { search, leads: leads.map(normalize) };
+  // Resultados mostram o score no modo compacto (sem os motivos neutros): 250–500 leads por busca,
+  // cada motivo a menos é peso a menos no celular. A página do lead continua com todos.
+  return {
+    search,
+    leads: leads.map(normalize).map((l) => ({ ...l, scoreReasons: l.scoreReasons.filter((r) => r.kind !== "neutral") })),
+  };
 }
 
 export async function recentSearches(userId: string, take = 6) {

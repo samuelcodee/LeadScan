@@ -103,37 +103,140 @@ export function AudioPlayer({ src, durationMs, mine }: { src: string; durationMs
   );
 }
 
-/** Quadro do vídeo (para a capa moderada) + duração, lidos no próprio navegador. */
-export async function readVideo(file: File): Promise<{ poster: Blob; durationMs: number }> {
+/** Espera um evento do vídeo (ou desiste depois de ms). */
+function waitFor(v: HTMLVideoElement, events: string[], ms: number) {
+  return new Promise<boolean>((resolve) => {
+    const done = (ok: boolean) => {
+      clearTimeout(t);
+      events.forEach((e) => v.removeEventListener(e, onOk));
+      v.removeEventListener("error", onErr);
+      resolve(ok);
+    };
+    const onOk = () => done(true);
+    const onErr = () => done(false);
+    const t = setTimeout(() => done(false), ms);
+    events.forEach((e) => v.addEventListener(e, onOk, { once: true }));
+    v.addEventListener("error", onErr, { once: true });
+  });
+}
+
+/** Capa neutra (quadro escuro com o símbolo de play) quando o navegador não consegue tirar um quadro. */
+async function fallbackPoster(): Promise<Blob> {
+  const c = document.createElement("canvas");
+  c.width = 640;
+  c.height = 360;
+  const g = c.getContext("2d")!;
+  g.fillStyle = "#111518";
+  g.fillRect(0, 0, 640, 360);
+  g.fillStyle = "#EFFF00";
+  g.beginPath();
+  g.moveTo(290, 140);
+  g.lineTo(290, 220);
+  g.lineTo(360, 180);
+  g.closePath();
+  g.fill();
+  return new Promise<Blob>((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error("sem capa"))), "image/jpeg", 0.85));
+}
+
+/**
+ * Quadro do vídeo (para a capa moderada) + duração, lidos no próprio navegador.
+ * iPhone não carrega o quadro sem "tocar": pedimos só os metadados, pulamos para ~0,1 s e
+ * esperamos o quadro aparecer. Vídeo que o navegador não decodifica (ex.: HEVC no Chrome do
+ * Windows) ainda sobe, com uma capa neutra — a capa nunca impede o envio.
+ */
+export async function readVideo(file: Blob): Promise<{ poster: Blob; durationMs: number }> {
   const url = URL.createObjectURL(file);
+  const v = document.createElement("video");
   try {
-    const v = document.createElement("video");
     v.muted = true;
     v.playsInline = true;
-    v.preload = "auto";
+    v.setAttribute("playsinline", "");
+    v.preload = "metadata";
     v.src = url;
-    await new Promise<void>((res, rej) => {
-      v.onloadeddata = () => res();
-      v.onerror = () => rej(new Error("vídeo ilegível"));
-      setTimeout(() => rej(new Error("tempo esgotado")), 12_000);
-    });
-    const at = Math.min(1, (v.duration || 0) / 3);
-    if (at > 0) {
-      v.currentTime = at;
-      await new Promise<void>((res) => {
-        v.onseeked = () => res();
-        setTimeout(res, 1500);
-      });
-    }
-    const scale = Math.min(1, 720 / Math.max(v.videoWidth || 1, v.videoHeight || 1));
+    const meta = await waitFor(v, ["loadedmetadata"], 8_000);
+    const durationMs = meta && Number.isFinite(v.duration) ? Math.round(v.duration * 1000) : 0;
+    if (!meta || !v.videoWidth) return { poster: await fallbackPoster(), durationMs };
+    v.currentTime = Math.min(1, (v.duration || 0) / 3) || 0.1;
+    await waitFor(v, ["seeked", "loadeddata"], 3_000);
+    const scale = Math.min(1, 720 / Math.max(v.videoWidth, v.videoHeight));
     const canvas = document.createElement("canvas");
-    canvas.width = Math.max(64, Math.round((v.videoWidth || 640) * scale));
-    canvas.height = Math.max(64, Math.round((v.videoHeight || 360) * scale));
-    canvas.getContext("2d")?.drawImage(v, 0, 0, canvas.width, canvas.height);
+    canvas.width = Math.max(64, Math.round(v.videoWidth * scale));
+    canvas.height = Math.max(64, Math.round(v.videoHeight * scale));
+    try {
+      canvas.getContext("2d")?.drawImage(v, 0, 0, canvas.width, canvas.height);
+    } catch {
+      return { poster: await fallbackPoster(), durationMs };
+    }
     const poster = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/jpeg", 0.8));
-    if (!poster) throw new Error("sem quadro");
-    return { poster, durationMs: Math.round((v.duration || 0) * 1000) };
+    return { poster: poster ?? (await fallbackPoster()), durationMs };
   } finally {
+    v.removeAttribute("src");
+    v.load();
     URL.revokeObjectURL(url);
+  }
+}
+
+/**
+ * Compacta um vídeo grande no próprio aparelho: toca em silêncio, redesenha num canvas menor
+ * (até 854 px no lado maior) e grava com MediaRecorder (~1 Mbit/s). Leva o tempo do vídeo.
+ * O áudio vem por Web Audio (sem tocar no alto-falante); se o navegador não deixar, sai sem som.
+ * null = o navegador não sabe gravar vídeo (a tela avisa).
+ */
+export async function compressVideo(file: File, onProgress: (p: number) => void): Promise<Blob | null> {
+  if (typeof MediaRecorder === "undefined" || typeof HTMLCanvasElement.prototype.captureStream !== "function") return null;
+  const type = ["video/mp4;codecs=avc1.42E01E,mp4a.40.2", "video/mp4", "video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"].find((t) => MediaRecorder.isTypeSupported(t));
+  if (!type) return null;
+  const url = URL.createObjectURL(file);
+  const v = document.createElement("video");
+  v.src = url;
+  v.playsInline = true;
+  v.setAttribute("playsinline", "");
+  v.preload = "auto";
+  let audioCtx: AudioContext | null = null;
+  try {
+    if (!(await waitFor(v, ["loadedmetadata"], 10_000)) || !v.videoWidth) return null;
+    const scale = Math.min(1, 854 / Math.max(v.videoWidth, v.videoHeight));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round((v.videoWidth * scale) / 2) * 2;
+    canvas.height = Math.round((v.videoHeight * scale) / 2) * 2;
+    const g = canvas.getContext("2d")!;
+    const stream = canvas.captureStream(30);
+    try {
+      audioCtx = new AudioContext();
+      const dest = audioCtx.createMediaStreamDestination();
+      audioCtx.createMediaElementSource(v).connect(dest);
+      dest.stream.getAudioTracks().forEach((t) => stream.addTrack(t));
+      await audioCtx.resume().catch(() => {});
+    } catch {
+      v.muted = true; // sem Web Audio: vídeo sem som, melhor que não enviar
+    }
+    const rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 1_000_000, audioBitsPerSecond: 96_000 });
+    const chunks: Blob[] = [];
+    rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+    const stopped = new Promise<void>((res) => (rec.onstop = () => res()));
+    let raf = 0;
+    const draw = () => {
+      g.drawImage(v, 0, 0, canvas.width, canvas.height);
+      if (v.duration) onProgress(Math.min(0.99, v.currentTime / v.duration));
+      if (!v.ended) raf = requestAnimationFrame(draw);
+    };
+    rec.start(1000);
+    await v.play();
+    draw();
+    await waitFor(v, ["ended"], Math.max(15_000, (v.duration || 0) * 1000 * 1.6 + 10_000));
+    cancelAnimationFrame(raf);
+    rec.stop();
+    await stopped;
+    onProgress(1);
+    const out = new Blob(chunks, { type: type.split(";")[0] });
+    return out.size ? out : null;
+  } catch {
+    return null;
+  } finally {
+    v.pause();
+    v.removeAttribute("src");
+    v.load();
+    URL.revokeObjectURL(url);
+    await audioCtx?.close().catch(() => {});
   }
 }

@@ -55,6 +55,8 @@ export function ChargeDialog({
 
   const openDialog = () => {
     setOpen(true);
+    // Fechou sem gerar (X, Esc ou sem querer): reabre com o que já tinha preenchido
+    if (data && !result) return;
     setResult(null);
     startLoading(async () => {
       const r = await chargeDialogData({});
@@ -111,7 +113,7 @@ export function ChargeDialog({
         <Receipt /> {label}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md" persistent>
           <DialogHeader>
             <DialogTitle>{result ? "Link pronto" : "Nova cobrança"}</DialogTitle>
             <DialogDescription>

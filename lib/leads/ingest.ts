@@ -159,8 +159,15 @@ export async function excludeKnown(userId: string, items: ProviderBusiness[], op
 }
 
 /** LGPD: remove empresas que pediram para não ser contatadas. */
+/** Quantos pedidos de remoção existem (cache de 60 s por instância): zero = nada a filtrar. */
+let suppressionCount: { at: number; n: number } | null = null;
+async function hasSuppressions() {
+  if (!suppressionCount || Date.now() - suppressionCount.at > 60_000) suppressionCount = { at: Date.now(), n: await db.suppression.count() };
+  return suppressionCount.n > 0;
+}
+
 export async function filterSuppressed(items: ProviderBusiness[]) {
-  if (items.length === 0) return items;
+  if (items.length === 0 || !(await hasSuppressions())) return items;
   const keys = items.flatMap(suppressionKeys);
   const blocked = await db.suppression.findMany({
     where: { OR: keys.map((k) => ({ kind: k.kind, value: k.value })) },
@@ -181,9 +188,22 @@ export async function upsertLeads(opts: {
   isDemo: boolean;
   category: string;
   items: ProviderBusiness[];
+  /** Já passaram por excludeKnown (nenhum existe para o usuário): grava e devolve numa consulta só */
+  allNew?: boolean;
 }) {
   const { userId, provider, isDemo, category, items } = opts;
   if (items.length === 0) return [];
+  if (opts.allNew) {
+    const created = await db.lead.createManyAndReturn({
+      data: items.map((i) => ({ userId, provider, externalId: i.externalId, isDemo, ...toLeadData(i, category) })),
+      skipDuplicates: true,
+      select: { id: true, score: true },
+    });
+    if (created.length) {
+      await db.leadEvent.createMany({ data: created.map((r) => ({ leadId: r.id, userId, type: "FOUND" as const, meta: { provider } })) });
+    }
+    return created;
+  }
   const externalIds = items.map((i) => i.externalId);
   const existing = await db.lead.findMany({
     where: { userId, provider, externalId: { in: externalIds } },

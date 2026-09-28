@@ -35,5 +35,6 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.svg|robots.txt).*)"],
+  // osm/: base pública de empresas (arquivos estáticos) — o próprio servidor busca sem sessão
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.svg|robots.txt|osm/).*)"],
 };

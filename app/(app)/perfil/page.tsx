@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ExternalLink } from "lucide-react";
 import { PageHeader } from "@/components/common/page-header";
+import { LiveRefresh } from "@/components/live/live-refresh";
 import { LevelBadge } from "@/components/profile/identity";
 import { Insignia } from "@/components/profile/insignia";
 import { AccountFields, AvatarUpload, PrivacyFields, ProfileFields, TitlePicker } from "@/components/profile/profile-editor";
@@ -9,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { badgeKeyFor, getLevel, LEVELS, nextLevelProgress } from "@/lib/gamification/levels";
-import { salesStats, userTitles } from "@/lib/gamification/service";
+import { salesStats, userTitles, verifiedTotals } from "@/lib/gamification/service";
 import { formatBRL, formatDate, formatInt } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { formatPhone } from "@/lib/whatsapp/phone";
@@ -30,9 +31,10 @@ function Section({ id, title, description, children }: { id: string; title: stri
 
 export default async function MyProfilePage() {
   const user = await requireUser();
-  const [titles, stats, achievements] = await Promise.all([
+  const [titles, stats, totals, achievements] = await Promise.all([
     userTitles(user.id, user.level),
     salesStats(user.id),
+    verifiedTotals(user.id),
     db.achievement.findMany({ where: { userId: user.id }, select: { key: true, unlockedAt: true } }),
   ]);
   const unlocked = new Map(achievements.map((a) => [a.key, a.unlockedAt]));
@@ -42,7 +44,12 @@ export default async function MyProfilePage() {
     <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
       <PageHeader
         title="Meu perfil"
-        description="Como a comunidade vê você. Cada ajuste é salvo na hora."
+        description={
+          <>
+            Como a comunidade vê você. Cada ajuste é salvo na hora.{" "}
+            <LiveRefresh topics={["me"]} label="Vendas e níveis atualizam ao vivo" className="mt-1 flex" />
+          </>
+        }
         actions={
           <Button asChild variant="outline">
             <Link href={`/u/${user.username}`}>
@@ -78,7 +85,7 @@ export default async function MyProfilePage() {
               <div className="flex flex-wrap items-center gap-2">
                 {user.level > 0 ? <LevelBadge level={user.level} withName /> : <span className="text-sm font-medium">Sem nível ainda</span>}
                 <span className="text-sm text-muted-foreground">
-                  · {formatInt(stats.sales)} vendas verificadas · {formatBRL(stats.revenueCents)}
+                  · {formatInt(totals.sales)} vendas verificadas · {formatBRL(totals.revenueCents)}
                 </span>
               </div>
               {progress && (

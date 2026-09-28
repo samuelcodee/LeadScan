@@ -19,6 +19,8 @@ export type ProviderQuery = {
   offset?: number;
   /** Posição da tarefa na busca: fontes com vários servidores espalham as consultas paralelas. */
   hint?: number;
+  /** Parte de uma busca geral (estado/Brasil): a fonte não deve cair num modo lento cidade a cidade. */
+  regional?: boolean;
 };
 
 /** Foto real do negócio (hoje: Google Places). `ref` = nome do recurso na API. */
@@ -78,6 +80,11 @@ export interface DataProvider {
    * continua dali. Sem este método, a cidade inteira vem de search() de uma vez.
    */
   sweep?(query: ProviderQuery, cursor: unknown, signal?: AbortSignal): Promise<SweepPage>;
+  /**
+   * Opcional: cidades da região que TÊM empresas das categorias ("Nome|UF" → quantidade).
+   * A busca geral percorre só elas (sem consultar milhares de cidades vazias).
+   */
+  regionCities?(uf: string | undefined, categories: string[]): Promise<Map<string, number> | null>;
 }
 
 export type SweepPage = {
