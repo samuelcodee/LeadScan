@@ -68,7 +68,7 @@ export default async function FinancePage(props: PageProps<"/financeiro">) {
       {notice && <p className="mt-4 rounded-md border border-success/30 bg-success-soft px-4 py-2.5 text-sm text-success">{notice}</p>}
       {error && (
         <p className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 px-4 py-2.5 text-sm text-destructive">
-          Não foi possível concluir a conexão ({error.replace(/-/g, " ")}). Tente de novo.
+          {CONNECT_ERRORS[error] ?? `Não foi possível concluir a conexão (${error.replace(/-/g, " ")}). Tente de novo.`}
         </p>
       )}
 
@@ -200,3 +200,14 @@ export default async function FinancePage(props: PageProps<"/financeiro">) {
     </div>
   );
 }
+
+/** Erros da conexão com o provedor de pagamento: o que houve e o que ajustar. */
+const CONNECT_ERRORS: Record<string, string> = {
+  "mercadopago-credenciais": "O Mercado Pago recusou as credenciais da plataforma. Confira na Vercel se MP_CLIENT_ID e MP_CLIENT_SECRET são os de PRODUÇÃO, sem espaços, e faça o redeploy.",
+  "mercadopago-redirect": "A Redirect URL cadastrada na aplicação do Mercado Pago não confere com o endereço do site. Ela precisa ser exatamente https://leadscanbr.vercel.app/api/payments/connect/mercadopago/callback.",
+  "mercadopago-codigo": "A autorização do Mercado Pago expirou antes de voltar. Clique em Conectar de novo.",
+  "mercadopago-estado": "A conexão demorou demais ou foi aberta em outra aba. Clique em Conectar de novo nesta mesma aba.",
+  "mercadopago-recusado": "A autorização foi cancelada na tela do Mercado Pago. Clique em Conectar e autorize para receber por lá.",
+  "mercadopago-em-uso": "Essa conta do Mercado Pago já está conectada a outro usuário do LeadScan.",
+  "mercadopago-indisponivel": "O Mercado Pago ainda não foi ativado pelo administrador da plataforma.",
+};

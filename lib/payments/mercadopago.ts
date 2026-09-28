@@ -39,8 +39,39 @@ async function tokenRequest(body: Record<string, string>) {
     body: JSON.stringify({ client_id: env().MP_CLIENT_ID, client_secret: env().MP_CLIENT_SECRET, ...body }),
     signal: AbortSignal.timeout(15_000),
   });
-  if (!res.ok) throw new Error(`Mercado Pago OAuth respondeu ${res.status}`);
+  if (!res.ok) {
+    const raw = await res.text().catch(() => "");
+    let err: { error?: string; message?: string } = {};
+    try {
+      err = JSON.parse(raw);
+    } catch {}
+    throw new MpOAuthError(classifyOAuth(res.status, err), `${res.status} ${err.error ?? ""} ${err.message ?? raw.slice(0, 200)}`.trim());
+  }
   return (await res.json()) as TokenResponse;
+}
+
+/**
+ * Falha do OAuth com a causa separada, para a tela dizer o que ajustar (e o log guardar a resposta):
+ *  - credenciais: Client ID/Secret errados ou de teste
+ *  - redirect: a Redirect URL da aplicação no MP não bate com NEXT_PUBLIC_APP_URL
+ *  - codigo: autorização expirou ou já foi usada (é só tentar de novo)
+ */
+export type MpOAuthCause = "credenciais" | "redirect" | "codigo" | "outro";
+export class MpOAuthError extends Error {
+  constructor(
+    readonly cause: MpOAuthCause,
+    readonly detail: string,
+  ) {
+    super(`Mercado Pago OAuth: ${detail}`);
+  }
+}
+
+export function classifyOAuth(status: number, err: { error?: string; message?: string }): MpOAuthCause {
+  const text = `${err.error ?? ""} ${err.message ?? ""}`.toLowerCase();
+  if (text.includes("redirect")) return "redirect";
+  if (status === 401 || text.includes("invalid_client") || text.includes("client_id") || text.includes("client_secret") || text.includes("credential")) return "credenciais";
+  if (text.includes("invalid_grant") || text.includes("code")) return "codigo";
+  return "outro";
 }
 
 export function mpExchangeCode(code: string, redirectUri: string) {

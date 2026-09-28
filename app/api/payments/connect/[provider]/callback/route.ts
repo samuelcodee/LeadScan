@@ -3,7 +3,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { safeEqual, unsignValue } from "@/lib/auth/token";
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
-import { mpExchangeCode } from "@/lib/payments/mercadopago";
+import { MpOAuthError, mpExchangeCode } from "@/lib/payments/mercadopago";
 import { saveAccount } from "@/lib/payments/service";
 import { stripeAccountStatus } from "@/lib/payments/stripe";
 import { appUrl } from "@/lib/prototypes/service";
@@ -23,6 +23,8 @@ export async function GET(request: NextRequest, ctx: RouteContext<"/api/payments
 
   try {
     if (provider === "mercadopago") {
+      // Recusou na tela do MP (ou o MP devolveu erro na própria autorização)
+      if (request.nextUrl.searchParams.get("error")) return back("erro=mercadopago-recusado");
       const code = request.nextUrl.searchParams.get("code");
       const state = request.nextUrl.searchParams.get("state") ?? "";
       const saved = await unsignValue(request.cookies.get(STATE_COOKIE)?.value);
@@ -53,6 +55,7 @@ export async function GET(request: NextRequest, ctx: RouteContext<"/api/payments
     }
   } catch (err) {
     logger.error("callback de pagamento falhou", { provider, err: String(err) });
+    if (err instanceof MpOAuthError) return back(`erro=mercadopago-${err.cause}`);
     return back(`erro=${provider}-falhou`);
   }
   return back("erro=provedor-desconhecido");
